@@ -1,65 +1,116 @@
 import numpy as np
 from OpenGL.GL import *
 import pyrr
+import ctypes
+from PIL import Image
 
-
-class UnidadeMovel:
-    def __init__(self):
-        # Usaremos o mesmo VBO de cubo do tabuleiro para as partes do robô
+class TratorComTextura:
+    def __init__(self, obj_path, texture_path):
+        """
+        Carreador manual e robusto de arquivos .obj para garantir a leitura
+        de texturas (UV) e posições (XYZ) para o OpenGL Moderno.
+        """
+        self.vao = None
         self.vbo = None
-        self.posicao = [0, 0, 0]
-        self.rotacao = 0
+        self.texture_id = None
+        self.num_vertices = 0
+        
+        self.carregar_obj_manual(obj_path)
+        self.carregar_textura_gpu(texture_path)
 
-    def draw_cube(self, shader_program, transform_matrix, color):
-        """Desenha um cubo individual com uma cor e transformação específica."""
-        model_loc = glGetUniformLocation(shader_program, "model")
-        color_loc = glGetUniformLocation(shader_program, "u_color")
+    def carregar_obj_manual(self, obj_path):
+        # Listas para armazenar os dados brutos do arquivo
+        vertices = []
+        texturas = []
+        dados_finais = []
 
-        glUniformMatrix4fv(model_loc, 1, GL_FALSE, transform_matrix)
-        glUniform3f(color_loc, *color)
-        glDrawArrays(GL_TRIANGLES, 0, 36)
+        # Lê o arquivo linha por linha para cruzar posições e UVs de forma garantida
+        with open(obj_path, 'r') as f:
+            for linha in f:
+                partes = linha.split()
+                if not partes:
+                    continue
+                
+                # 'v' representa posição do vértice (X, Y, Z)
+                if partes[0] == 'v':
+                    vertices.append([float(partes[1]), float(partes[2]), float(partes[3])])
+                # 'vt' representa coordenada de textura (U, V)
+                elif partes[0] == 'vt':
+                    texturas.append([float(partes[1]), float(partes[2])])
+                # 'f' representa a face (triângulo) que une os índices
+                elif partes[0] == 'f':
+                    for vertice_info in partes[1:]:
+                        # O formato de face costuma ser: indice_vertice/indice_uv/indice_normal
+                        sub_partes = vertice_info.split('/')
+                        idx_v = int(sub_partes[0]) - 1
+                        
+                        # Adiciona a posição XYZ
+                        dados_finais.extend(vertices[idx_v])
+                        
+                        # Se houver coordenada de textura associada na face
+                        if len(sub_partes) > 1 and sub_partes[1] != '':
+                            idx_vt = int(sub_partes[1]) - 1
+                            dados_finais.extend(texturas[idx_vt])
+                        else:
+                            # Fallback caso essa face específica não tenha mapeamento UV
+                            dados_finais.extend([0.0, 0.0])
 
+        dados_array = np.array(dados_finais, dtype='float32')
+        self.num_vertices = len(dados_array) // 5  # Cada vértice tem 3 de posição + 2 de UV
 
-class Trator(UnidadeMovel):
-    def __init__(self, vbo_referencia, vao_referencia):
-        super().__init__()
-        self.vbo = vbo_referencia
-        self.vao = vao_referencia # Guardamos a referência do VAO
+        # Configuração do VAO e VBO na GPU
+        self.vao = glGenVertexArrays(1)
+        glBindVertexArray(self.vao)
+
+        self.vbo = glGenBuffers(1)
+        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        glBufferData(GL_ARRAY_BUFFER, dados_array.nbytes, dados_array, GL_STATIC_DRAW)
+
+        # Passo (stride) é de 5 floats (5 * 4 bytes = 20 bytes)
+        # Atributo 0: Posição (X, Y, Z)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * dados_array.itemsize, ctypes.c_void_p(0))
+        glEnableVertexAttribArray(0)
+        
+        # Atributo 1: Coordenadas de Textura (U, V) - Começa após o 3º float
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * dados_array.itemsize, ctypes.c_void_p(3 * dados_array.itemsize))
+        glEnableVertexAttribArray(1)
+
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glBindVertexArray(0)
+
+    def carregar_textura_gpu(self, texture_path):
+        img = Image.open(texture_path)
+        img = img.transpose(Image.FLIP_TOP_BOTTOM)
+        img_data = img.convert("RGBA").tobytes()
+        width, height = img.size
+
+        self.texture_id = glGenTextures(1)
+        glBindTexture(GL_TEXTURE_2D, self.texture_id)
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
+        glBindTexture(GL_TEXTURE_2D, 0)
 
     def desenhar(self, shader_program, x, z, angulo_pa=0):
         glBindVertexArray(self.vao)
-        glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+        
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, self.texture_id)
+        glUniform1i(glGetUniformLocation(shader_program, "u_texture"), 0)
 
-        # 1. MATRIZ RAIZ (Posição global do Trator no grid)[cite: 2]
-        matriz_base = pyrr.matrix44.create_from_translation([x, 0.0, z])
-
-        # --- PARTE 1: CHASSI (Base do Trator) ---
-        # Escalamos o cubo para parecer uma base larga e baixa
-        escala_chassi = pyrr.matrix44.create_from_scale([0.8, 0.3, 0.8])
-        transform_chassi = pyrr.matrix44.multiply(escala_chassi, matriz_base)
-        self.draw_cube(
-            shader_program, transform_chassi, [0.8, 0.6, 0.0]
-        )  # Amarelo Trator[cite: 2]
-
-        # --- PARTE 2: CABINE (Hierarquia: Presa à Base) ---
-        # Subimos a cabine um pouco em relação à base (0.3 no eixo Y)
-        pos_cabine = pyrr.matrix44.create_from_translation([0.0, 0.3, 0.0])
-        escala_cabine = pyrr.matrix44.create_from_scale([0.4, 0.4, 0.4])
-
-        # Multiplicamos: Base * Posição Relativa * Escala
-        transform_cabine = pyrr.matrix44.multiply(pos_cabine, matriz_base)
-        transform_cabine = pyrr.matrix44.multiply(escala_cabine, transform_cabine)
-        self.draw_cube(
-            shader_program, transform_cabine, [0.2, 0.2, 0.2]
-        )  # Preto/Vidro[cite: 2]
-
-        # --- PARTE 3: A PÁ (Hierarquia: Presa à Base, mas na frente) ---
-        pos_pa = pyrr.matrix44.create_from_translation([0.0, 0.1, 0.5])
-        rot_pa = pyrr.matrix44.create_from_x_rotation(np.radians(angulo_pa))
-        escala_pa = pyrr.matrix44.create_from_scale([0.9, 0.2, 0.1])
-
-        transform_pa = pyrr.matrix44.multiply(rot_pa, matriz_base)
-        transform_pa = pyrr.matrix44.multiply(pos_pa, transform_pa)
-        transform_pa = pyrr.matrix44.multiply(escala_pa, transform_pa)
-        self.draw_cube(shader_program, transform_pa, [0.7, 0.7, 0.7])  # Metal[cite: 2]
+        model_loc = glGetUniformLocation(shader_program, "model")
+        matriz_escala = pyrr.matrix44.create_from_scale([0.4, 0.4, 0.4]) 
+        vibracao = np.sin(angulo_pa * 0.5) * 0.02
+        matriz_posicao = pyrr.matrix44.create_from_translation([x, vibracao + 0.5, z])
+        transformacao_final = pyrr.matrix44.multiply(matriz_escala, matriz_posicao)
+        
+        glUniformMatrix4fv(model_loc, 1, GL_FALSE, transformacao_final)
+        
+        glDrawArrays(GL_TRIANGLES, 0, self.num_vertices)
+        
+        glBindTexture(GL_TEXTURE_2D, 0)
         glBindVertexArray(0)
