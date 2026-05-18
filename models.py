@@ -4,16 +4,16 @@ import pyrr
 import ctypes
 from PIL import Image
 
-class TratorComTextura:
-    def __init__(self, obj_path, texture_path):
-        """
-        Carreador manual e robusto de arquivos .obj para garantir a leitura
-        de texturas (UV) e posições (XYZ) para o OpenGL Moderno.
-        """
+class Modelo3DComTextura:
+    def __init__(self, obj_path, texture_path, escala=0.4, altura=0.5):
         self.vao = None
         self.vbo = None
         self.texture_id = None
         self.num_vertices = 0
+        
+        # Guardamos as propriedades únicas deste modelo
+        self.escala = escala
+        self.altura = altura
         
         self.carregar_obj_manual(obj_path)
         self.carregar_textura_gpu(texture_path)
@@ -103,11 +103,15 @@ class TratorComTextura:
         glUniform1i(glGetUniformLocation(shader_program, "u_texture"), 0)
 
         model_loc = glGetUniformLocation(shader_program, "model")
-        matriz_escala = pyrr.matrix44.create_from_scale([0.4, 0.4, 0.4]) 
-        vibracao = np.sin(angulo_pa * 0.5) * 0.02
-        matriz_posicao = pyrr.matrix44.create_from_translation([x, vibracao + 0.5, z])
-        transformacao_final = pyrr.matrix44.multiply(matriz_escala, matriz_posicao)
         
+        # Usa a escala definida na criação do objeto
+        matriz_escala = pyrr.matrix44.create_from_scale([self.escala, self.escala, self.escala]) 
+        
+        vibracao = np.sin(angulo_pa * 0.5) * 0.02
+        # Usa a altura definida na criação do objeto somada à vibração do motor
+        matriz_posicao = pyrr.matrix44.create_from_translation([x, self.altura + vibracao, z])
+        
+        transformacao_final = pyrr.matrix44.multiply(matriz_escala, matriz_posicao)
         glUniformMatrix4fv(model_loc, 1, GL_FALSE, transformacao_final)
         
         glDrawArrays(GL_TRIANGLES, 0, self.num_vertices)
