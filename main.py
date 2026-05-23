@@ -81,6 +81,8 @@ def main():
 
     minha_escavadeira = Modelo3DComTextura("assets/escavadeira.obj", "assets/escavadeira_textura.jpeg", escala=0.13, altura=0.1)
 
+    barata = Modelo3DComTextura("assets/barata.obj", "assets/barata_textura.png", escala=0.1, altura=0.1)
+
     view = pyrr.matrix44.create_look_at(eye=[9, 9, 9], target=[0, 0, 0], up=[0, 1, 0])
     projection = pyrr.matrix44.create_perspective_projection_matrix(fovy=45, aspect=800 / 600, near=0.1, far=100.0)
 
@@ -163,6 +165,22 @@ def main():
         
         # Desenha o modelo na tela
         minha_escavadeira.desenhar(shader_trator, x_escavadeira, z_escavadeira, angulo_pa=tempo_motor)
+
+        # --- 6. DESENHAR A BARATA MUTANTE ---
+        glUseProgram(shader_trator)
+        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "view"), 1, GL_FALSE, view)
+        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
+
+        # Escolhe a posição no grid (Coluna 6, Linha 3)
+        x_barata = 6 - 3.5
+        z_barata = 3 - 3.5
+
+        # Para dar um efeito de "inseto vivo", podemos usar o tempo do GLFW 
+        # para fazer uma vibração bem rápida e curta, simulando as antenas ou as pernas se mexendo
+        tempo_inseto = glfw.get_time() * 8.0
+        
+        # Desenha a barata no tabuleiro
+        barata.desenhar(shader_trator, x_barata, z_barata, angulo_pa=tempo_inseto)
 
         glfw.swap_buffers(window)
         glfw.poll_events()
