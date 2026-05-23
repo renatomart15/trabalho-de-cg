@@ -8,6 +8,10 @@ from tabuleiro import Tabuleiro
 
 projection = None
 
+TURNO_JOGADOR = 0
+TURNO_INIMIGO = 1
+estado_atual = TURNO_JOGADOR
+
 def inicializar_shaders(vertex_path, fragment_path):
     with open(vertex_path, "r") as f:
         vertex_src = f.read()
@@ -39,6 +43,17 @@ def redimensionar_janela(window, largura, altura):
     # em vez da linha de cima, você usaria algo assim:
     # projection = pyrr.matrix44.create_orthogonal_projection_matrix(-10.0 * proporcao, 10.0 * proporcao, -10.0, 10.0, 0.1, 100.0)
 
+def mapear_clique_mouse(window, botao, acao, modificadores):
+    # Só queremos registrar o clique quando o jogador APERTAR o botão ESQUERDO do mouse
+    if botao == glfw.MOUSE_BUTTON_LEFT and acao == glfw.PRESS:
+        # Pega a posição (X, Y) do cursor na tela (em pixels)
+        x_pixel, y_pixel = glfw.get_cursor_pos(window)
+        largura, altura = glfw.get_window_size(window)
+        
+        print(f"Clique detectado na tela: Pixels X={x_pixel:.1f}, Y={y_pixel:.1f}")
+        
+        # TODO: Converter essa coordenada para os índices [row][col] da matriz!
+
 def main():
     if not glfw.init():
         return
@@ -65,13 +80,13 @@ def main():
     projection = pyrr.matrix44.create_perspective_projection_matrix(45.0, 800 / 600, 0.1, 100.0)
 
     # IMPORTANTE: Carregamos os dois Shaders separados
-    shader_trator = inicializar_shaders("shaders/vertex_shader.glsl", "shaders/fragment_shader.glsl")
+    vertex_shader = inicializar_shaders("shaders/vertex_shader.glsl", "shaders/fragment_shader.glsl")
     shader_tabuleiro = inicializar_shaders("shaders/vertex_shader.glsl", "shaders/fragment_tabuleiro.glsl")
 
     meu_tabuleiro = Tabuleiro()
     
     # Instancia o trator passando o modelo e a imagem da textura
-    meu_trator = Modelo3DComTextura("assets/trator.obj", "assets/trator_textura.jpeg", escala=0.4, altura=0.5)
+    meu_trator = Modelo3DComTextura("assets/trator.obj", "assets/trator_textura.jpeg", escala=0.4, altura=0.3)
 
     # Instancia a casa
     minha_casa = Modelo3DComTextura("assets/casa.obj", "assets/casa_textura.jpeg", escala=0.001, altura=-0.3)
@@ -90,12 +105,6 @@ def main():
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
         glClearColor(0.12, 0.12, 0.12, 1.0) 
 
-        glUseProgram(shader_trator)
-        meu_tabuleiro.draw(shader_trator)
-
-        # Esta linha DEVE usar a variável 'projection' que a função de redimensionar atualiza!
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
-
         # --- 1. DESENHAR TABULEIRO (COR SÓLIDA) ---
         glUseProgram(shader_tabuleiro)
         glUniformMatrix4fv(glGetUniformLocation(shader_tabuleiro, "view"), 1, GL_FALSE, view)
@@ -103,84 +112,37 @@ def main():
         glBindTexture(GL_TEXTURE_2D, 0) # Garante que nenhuma textura está vazando aqui
         meu_tabuleiro.draw(shader_tabuleiro)
 
-        # --- 2. DESENHAR TRATOR (TEXTURIZADO) ---
-        glUseProgram(shader_trator)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "view"), 1, GL_FALSE, view)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
+        # --- DESENHO AUTOMATIZADO DE ENTIDADES ---
+        glUseProgram(vertex_shader)
+        glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "view"), 1, GL_FALSE, view)
+        glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "projection"), 1, GL_FALSE, projection)
 
         tempo_atual = glfw.get_time()
-        animacao_motor = np.sin(tempo_atual * 10)
 
-        x_grid = 2 - 3.5
-        z_grid = 4 - 3.5
-        meu_trator.desenhar(shader_trator, x_grid, z_grid, angulo_pa=animacao_motor)
-
-        # --- 3. DESENHAR AS CASAS AUTOMATICAMENTE NOS QUADRADOS CINZAS ---
-        glUseProgram(shader_trator)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "view"), 1, GL_FALSE, view)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
-
-        # Varre as linhas (row) e colunas (col) da matriz mapeada no seu tabuleiro
+        # Varre a matriz lógica do tabuleiro
         for row in range(8):
             for col in range(8):
-                # Verifica se o tipo de terreno atual é 2 (Cidade/Construção cinza)
-                if meu_tabuleiro.grid[row][col] == 2:
+                # Converte os índices da matriz para coordenadas do mundo 3D OpenGL
+                x_mundo = col - 3.5
+                z_mundo = row - 3.5
+                
+                id_entidade = meu_tabuleiro.entities[row][col]
+
+                if id_entidade == 1:   # Trator (Jogador 1)
+                    meu_trator.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
                     
-                    # Usa exatamente o mesmo cálculo de posicionamento do tabuleiro
-                    x_pos = col - 3.5
-                    z_pos = row - 3.5
+                elif id_entidade == 2: # Escavadeira (Jogador 1) - Balança de leve com o motor
+                    minha_escavadeira.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
                     
-                    # Desenha a casa na coordenada correta do grid cinza
-                    # Passamos angulo_pa=0 para que ela fique estática
-                    minha_casa.desenhar(shader_trator, x_pos, z_pos, angulo_pa=0)
+                elif id_entidade == 10: # Mosquito Mutante (Jogador 2 - Flutua rápido)
+                    meu_mosquito.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 5.0)
+                    
+                elif id_entidade == 11: # Barata Mutante (Jogador 2 - Vibra rápido)
+                    barata.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 8.0)
 
-        # --- 4. DESENHAR O INIMIGO (MOSQUITO) ---
-        glUseProgram(shader_trator)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "view"), 1, GL_FALSE, view)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
-
-        # Posição no grid
-        x_mosquito = 2 - 3.5
-        z_mosquito = 7 - 3.5
-
-        # Criamos um efeito de flutuação rápida usando o tempo atual
-        tempo_voo = glfw.get_time() * 5.0 
-        
-        # Passamos o tempo_voo no 'angulo_pa'. 
-        # Como nossa classe faz um np.sin(angulo_pa) * 0.02, o mosquito vai oscilar suavemente no ar!
-        meu_mosquito.desenhar(shader_trator, x_mosquito, z_mosquito, angulo_pa=tempo_voo)
-
-        # --- 5. DESENHAR A ESCAVADEIRA ---
-        glUseProgram(shader_trator)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "view"), 1, GL_FALSE, view)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
-
-        # Escolhe a posição no grid (Coluna 1, Linha 4)
-        x_escavadeira = 1 - 3.5
-        z_escavadeira = 4 - 3.5
-
-        # Como ela é um veículo pesado, podemos dar o mesmo efeito de vibração do motor do trator!
-        # Usamos o tempo do GLFW para fazê-la tremer de leve
-        tempo_motor = glfw.get_time()
-        
-        # Desenha o modelo na tela
-        minha_escavadeira.desenhar(shader_trator, x_escavadeira, z_escavadeira, angulo_pa=tempo_motor)
-
-        # --- 6. DESENHAR A BARATA MUTANTE ---
-        glUseProgram(shader_trator)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "view"), 1, GL_FALSE, view)
-        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
-
-        # Escolhe a posição no grid (Coluna 6, Linha 3)
-        x_barata = 6 - 3.5
-        z_barata = 3 - 3.5
-
-        # Para dar um efeito de "inseto vivo", podemos usar o tempo do GLFW 
-        # para fazer uma vibração bem rápida e curta, simulando as antenas ou as pernas se mexendo
-        tempo_inseto = glfw.get_time() * 8.0
-        
-        # Desenha a barata no tabuleiro
-        barata.desenhar(shader_trator, x_barata, z_barata, angulo_pa=tempo_inseto)
+                # Se for casa
+                elif id_entidade == 50: # Casa / Estrutura Urbana (Estática)
+                    minha_casa.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=0)
 
         glfw.swap_buffers(window)
         glfw.poll_events()
