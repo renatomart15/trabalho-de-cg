@@ -79,6 +79,8 @@ def main():
     # Instanciando o inimigo: vamos colocar altura=0.2 para ele flutuar de leve sobre o bloco
     meu_mosquito = Modelo3DComTextura("assets/mosquito.obj", "assets/mosquito_textura.png", escala=0.05, altura=0.3)
 
+    minha_escavadeira = Modelo3DComTextura("assets/escavadeira.obj", "assets/escavadeira_textura.jpeg", escala=0.13, altura=0.1)
+
     view = pyrr.matrix44.create_look_at(eye=[9, 9, 9], target=[0, 0, 0], up=[0, 1, 0])
     projection = pyrr.matrix44.create_perspective_projection_matrix(fovy=45, aspect=800 / 600, near=0.1, far=100.0)
 
@@ -145,6 +147,22 @@ def main():
         # Passamos o tempo_voo no 'angulo_pa'. 
         # Como nossa classe faz um np.sin(angulo_pa) * 0.02, o mosquito vai oscilar suavemente no ar!
         meu_mosquito.desenhar(shader_trator, x_mosquito, z_mosquito, angulo_pa=tempo_voo)
+
+        # --- 5. DESENHAR A ESCAVADEIRA ---
+        glUseProgram(shader_trator)
+        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "view"), 1, GL_FALSE, view)
+        glUniformMatrix4fv(glGetUniformLocation(shader_trator, "projection"), 1, GL_FALSE, projection)
+
+        # Escolhe a posição no grid (Coluna 1, Linha 4)
+        x_escavadeira = 1 - 3.5
+        z_escavadeira = 4 - 3.5
+
+        # Como ela é um veículo pesado, podemos dar o mesmo efeito de vibração do motor do trator!
+        # Usamos o tempo do GLFW para fazê-la tremer de leve
+        tempo_motor = glfw.get_time()
+        
+        # Desenha o modelo na tela
+        minha_escavadeira.desenhar(shader_trator, x_escavadeira, z_escavadeira, angulo_pa=tempo_motor)
 
         glfw.swap_buffers(window)
         glfw.poll_events()
