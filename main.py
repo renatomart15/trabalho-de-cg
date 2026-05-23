@@ -28,6 +28,46 @@ estado_seletor = MODO_NAVEGACAO
 # --- AJUSTE AQUI: Começa vazia para não estourar o erro do OpenGL antes da hora ---
 meu_tabuleiro = None
 
+def desenhar_borda_cursor(shader_program, x_centro, z_centro):
+    # O tamanho do seu bloco do tabuleiro é 1.0x1.0. 
+    # Criamos os 4 cantos da face de cima ligeiramente elevados (y = 0.01) para não dar "Z-fighting" com o chão.
+    tamanho = 0.5  # Metade do bloco para cada lado a partir do centro
+    vertices = np.array([
+        [x_centro - tamanho, 0.01, z_centro - tamanho], # Canto Superior Esquerdo
+        [x_centro + tamanho, 0.01, z_centro - tamanho], # Canto Superior Direito
+        [x_centro + tamanho, 0.01, z_centro + tamanho], # Canto Inferior Direito
+        [x_centro - tamanho, 0.01, z_centro + tamanho]  # Canto Inferior Esquerdo
+    ], dtype=np.float32)
+
+    # 1. Gerar e configurar um VAO/VBO temporário rápidos para a linha
+    vao = glGenVertexArrays(1)
+    vbo = glGenBuffers(1)
+    
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+    
+    # Ativa o atributo de posição (geralmente localidade 0 no shader)
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
+    
+    # 2. Configurar a matriz Model para Identidade (já que calculamos os pontos no espaço do mundo)
+    model_loc = glGetUniformLocation(shader_program, "model")
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, pyrr.matrix44.create_identity())
+    
+    # 3. Mudar a espessura da linha e desenhar a borda
+    glLineWidth(4.0) # Ajuste aqui para deixar a borda mais grossa ou fina
+    
+    # Desenhamos um loop fechado conectando os 4 pontos
+    glDrawArrays(GL_LINE_LOOP, 0, 4)
+    
+    # 4. Limpar os buffers criados da memória da GPU
+    glLineWidth(1.0)
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+    glBindVertexArray(0)
+    glDeleteBuffers(1, [vbo])
+    glDeleteVertexArrays(1, [vao])
+
 def gerenciar_teclado(window, tecla, codigo_scancode, acao, modificadores):
     global cursor_row, cursor_col
     global estado_seletor, peca_selecionada, pos_selecionada, estado_atual, meu_tabuleiro
@@ -171,6 +211,7 @@ def main():
     meu_mosquito = Modelo3DComTextura("assets/mosquito.obj", "assets/mosquito_textura.png", escala=0.05, altura=0.3)
     minha_escavadeira = Modelo3DComTextura("assets/escavadeira.obj", "assets/escavadeira_textura.jpeg", escala=0.13, altura=0.1)
     barata = Modelo3DComTextura("assets/barata.obj", "assets/barata_textura.png", escala=0.1, altura=0.1)
+    minha_seta = Modelo3DComTextura("assets/seta.obj", "assets/seta_textura.png", escala=0.2, altura=1.2)
 
     view = pyrr.matrix44.create_look_at(eye=[9, 9, 9], target=[0, 0, 0], up=[0, 1, 0])
 
@@ -203,15 +244,20 @@ def main():
                     barata.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 8.0)
                 elif id_entidade == 50: 
                     minha_casa.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=0)
-
+        
+        # --- 3. DESENHAR PONTEIRO VISUAL DO CURSOR ---
         x_cursor_mundo = cursor_col - 3.5
         z_cursor_mundo = cursor_row - 3.5
 
         if estado_seletor == MODO_MOVIMENTACAO:
-            meu_trator.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 25.0)
+            # Se tiver uma peça selecionada, a seta gira muito rápido (feedback visual de ação)
+            minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 15.0)
         else:
-            meu_trator.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 10.0)
-        
+            # Modo normal: a seta gira de forma suave e elegante sobre o bloco
+            minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 3.0)
+
+        desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo)
+
         glfw.swap_buffers(window)
         glfw.poll_events()
 

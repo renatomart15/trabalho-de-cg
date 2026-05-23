@@ -5,7 +5,7 @@ import ctypes
 from PIL import Image
 
 class Modelo3DComTextura:
-    def __init__(self, obj_path, texture_path, escala=0.4, altura=0.5):
+    def __init__(self, obj_path, texture_path, escala=0.4, altura=0.5, rotacao_inicial_y=0.0, rotacao_inicial_x=0.0):
         self.vao = None
         self.vbo = None
         self.texture_id = None
@@ -14,6 +14,8 @@ class Modelo3DComTextura:
         # Guardamos as propriedades únicas deste modelo
         self.escala = escala
         self.altura = altura
+        self.rotacao_inicial_y = rotacao_inicial_y
+        self.rotacao_inicial_x = rotacao_inicial_x
         
         self.carregar_obj_manual(obj_path)
         self.carregar_textura_gpu(texture_path)
