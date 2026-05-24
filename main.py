@@ -25,21 +25,25 @@ MODO_NAVEGACAO = 0
 MODO_MOVIMENTACAO = 1
 estado_seletor = MODO_NAVEGACAO
 
+# Define o raio de movimentação máximo de cada unidade (em blocos)
+ALCANCE_MOVIMENTO = {
+    1: 3,  # Trator anda até 3 blocos
+    2: 2,  # Escavadeira anda até 2 blocos
+    10: 4, # Mosquito voa até 4 blocos
+    11: 2  # Barata anda até 2 blocos
+}
+
 # --- AJUSTE AQUI: Começa vazia para não estourar o erro do OpenGL antes da hora ---
 meu_tabuleiro = None
 
-def desenhar_borda_cursor(shader_program, x_centro, z_centro):
-    # O tamanho do seu bloco do tabuleiro é 1.0x1.0. 
-    # Criamos os 4 cantos da face de cima ligeiramente elevados (y = 0.01) para não dar "Z-fighting" com o chão.
-    tamanho = 0.5  # Metade do bloco para cada lado a partir do centro
+def desenhar_borda_cursor(shader_program, x_centro, z_centro, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.5):
     vertices = np.array([
-        [x_centro - tamanho, 0.01, z_centro - tamanho], # Canto Superior Esquerdo
-        [x_centro + tamanho, 0.01, z_centro - tamanho], # Canto Superior Direito
-        [x_centro + tamanho, 0.01, z_centro + tamanho], # Canto Inferior Direito
-        [x_centro - tamanho, 0.01, z_centro + tamanho]  # Canto Inferior Esquerdo
+        [x_centro - tamanho, 0.01, z_centro - tamanho], 
+        [x_centro + tamanho, 0.01, z_centro - tamanho], 
+        [x_centro + tamanho, 0.01, z_centro + tamanho], 
+        [x_centro - tamanho, 0.01, z_centro + tamanho]  
     ], dtype=np.float32)
 
-    # 1. Gerar e configurar um VAO/VBO temporário rápidos para a linha
     vao = glGenVertexArrays(1)
     vbo = glGenBuffers(1)
     
@@ -47,21 +51,26 @@ def desenhar_borda_cursor(shader_program, x_centro, z_centro):
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
     glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
     
-    # Ativa o atributo de posição (geralmente localidade 0 no shader)
     glEnableVertexAttribArray(0)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
     
-    # 2. Configurar a matriz Model para Identidade (já que calculamos os pontos no espaço do mundo)
     model_loc = glGetUniformLocation(shader_program, "model")
     glUniformMatrix4fv(model_loc, 1, GL_FALSE, pyrr.matrix44.create_identity())
     
-    # 3. Mudar a espessura da linha e desenhar a borda
-    glLineWidth(4.0) # Ajuste aqui para deixar a borda mais grossa ou fina
+    # --- COMENTE OU DESLIGUE A TEXTURA ATIVA PARA EVITAR LINHAS PRETAS ---
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, 0)
     
-    # Desenhamos um loop fechado conectando os 4 pontos
+    # Ativa a cor sólida e envia os valores RGB para o Fragment Shader
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
+    glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), cor_rgb[0], cor_rgb[1], cor_rgb[2], 1.0)
+    
+    glLineWidth(4.0) 
     glDrawArrays(GL_LINE_LOOP, 0, 4)
     
-    # 4. Limpar os buffers criados da memória da GPU
+    # Desativa a cor sólida para os próximos objetos
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
+    
     glLineWidth(1.0)
     glBindBuffer(GL_ARRAY_BUFFER, 0)
     glBindVertexArray(0)
@@ -116,28 +125,45 @@ def gerenciar_teclado(window, tecla, codigo_scancode, acao, modificadores):
                     print("Nenhuma peça sua nesta posição!")
 
             # --- ETAPA 2: MOVER A PEÇA ---
+            # --- ETAPA 2: MOVER A PEÇA (COM VALIDAÇÃO DE ALCANCE) ---
             elif estado_seletor == MODO_MOVIMENTACAO:
                 destino_id = meu_tabuleiro.entities[cursor_row][cursor_col]
                 origem_row, orig_col = pos_selecionada
 
-                if destino_id == 0:
+                # 1. Calcula a Distância de Manhattan (passos verticais + passos horizontais)
+                distancia = abs(cursor_row - origem_row) + abs(cursor_col - orig_col)
+                
+                # Descobre o limite de passos para a peça atual (padrão 2 se não listado)
+                limite_passos = ALCANCE_MOVIMENTO.get(peca_selecionada, 2)
+
+                # Regra A: O destino deve estar vazio (0) e dentro do limite de passos
+                if destino_id == 0 and distancia <= limite_passos:
+                    # Executa o movimento na matriz
                     meu_tabuleiro.entities[origem_row][orig_col] = 0
                     meu_tabuleiro.entities[cursor_row][cursor_col] = peca_selecionada
                     
-                    print(f"Peça movida com sucesso para [{cursor_row}][{cursor_col}]!")
+                    print(f"Peça movida para [{cursor_row}][{cursor_col}] (Distância: {distancia}/{limite_passos})!")
 
+                    # Limpa a seleção e volta ao modo navegação
                     peca_selecionada = None
                     pos_selecionada = None
                     estado_seletor = MODO_NAVEGACAO
 
+                    # Passa o turno automaticamente
                     estado_atual = TURNO_INIMIGO if estado_atual == TURNO_JOGADOR else TURNO_JOGADOR
                     print(f"Turno alterado! Agora é a vez do Turno: {estado_atual}")
 
                 elif (cursor_row, cursor_col) == pos_selecionada:
+                    # Cancelar seleção ao clicar na mesma peça
                     print("Seleção cancelada.")
                     peca_selecionada = None
                     pos_selecionada = None
                     estado_seletor = MODO_NAVEGACAO
+                    
+                elif distancia > limite_passos:
+                    # Bloqueio por distância muito longa
+                    print(f"Muito longe! O {peca_selecionada} só move {limite_passos} blocos. Tentou mover {distancia}.")
+                    
                 else:
                     print("Espaço ocupado! Escolha um bloco vazio.")
                     
@@ -245,19 +271,38 @@ def main():
                 elif id_entidade == 50: 
                     minha_casa.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=0)
         
-        # --- 3. DESENHAR PONTEIRO VISUAL DO CURSOR ---
+        # --- 3. DESENHAR PONTEIRO VISUAL DO CURSOR E ÁREA DE MOVIMENTO ---
         x_cursor_mundo = cursor_col - 3.5
         z_cursor_mundo = cursor_row - 3.5
 
+        # A) Desenha a seta na posição do cursor
         if estado_seletor == MODO_MOVIMENTACAO:
-            # Se tiver uma peça selecionada, a seta gira muito rápido (feedback visual de ação)
             minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 15.0)
         else:
-            # Modo normal: a seta gira de forma suave e elegante sobre o bloco
-            minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 3.0)
+            minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=0)
 
-        desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo)
+        # B) SE UMA PEÇA ESTIVER SELECIONADA: Mostra a malha de alcance
+        if estado_seletor == MODO_MOVIMENTACAO and pos_selecionada is not None:
+            origem_row, orig_col = pos_selecionada
+            limite_passos = ALCANCE_MOVIMENTO.get(peca_selecionada, 2)
 
+            for r in range(8):
+                for c in range(8):
+                    dist = abs(r - origem_row) + abs(c - orig_col)
+                    id_ocupante = meu_tabuleiro.entities[r][c]
+
+                    if dist <= limite_passos and id_ocupante == 0:
+                        x_valido = c - 3.5
+                        z_valido = r - 3.5
+                        # [1.0, 1.0, 1.0] garante cor branca pura com brilho máximo no shader
+                        desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.35)
+
+        # C) Desenha a borda do cursor principal por cima (com tamanho 0.5 padrão)
+        if estado_seletor == MODO_MOVIMENTACAO:
+            desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[1.0, 0.8, 0.0], tamanho=0.5)
+        else:
+            desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[0.2, 0.8, 0.2], tamanho=0.5)
+        
         glfw.swap_buffers(window)
         glfw.poll_events()
 
