@@ -2,6 +2,7 @@
 from OpenGL.GL import *
 import numpy as np
 import pyrr
+import math
 
 def desenhar_borda_cursor(shader_program, x_centro, z_centro, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.5):
     vertices = np.array([
@@ -99,3 +100,51 @@ def desenhar_barra_vida(shader_program, x_centro, z_centro, hp_atual, hp_maximo,
         glBindVertexArray(0)
         glDeleteBuffers(1, [vbo])
         glDeleteVertexArrays(1, [vao])
+
+def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
+    """Desenha um círculo plano escuro e translúcido rente ao chão para simular a sombra de unidades voadoras."""
+    # Criamos os vértices de um círculo (Triangle Fan)
+    num_segmentos = 16
+    vertices = [[x_centro, 0.01, z_centro]] # Vértice central (Y levemente acima do chão para evitar z-fighting)
+    
+    for i in range(num_segmentos + 1):
+        angulo = i * (2.0 * math.pi / num_segmentos)
+        x = x_centro + math.cos(angulo) * raio
+        z = z_centro + math.sin(angulo) * raio
+        vertices.append([x, 0.01, z])
+        
+    vertices = np.array(vertices, dtype=np.float32)
+
+    vao = glGenVertexArrays(1)
+    vbo = glGenBuffers(1)
+    
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+    
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
+    
+    model_loc = glGetUniformLocation(shader_program, "model")
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, pyrr.matrix44.create_identity())
+    
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, 0)
+    
+    # Habilitamos o Blending para que a sombra pareça realista e translúcida
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
+    # Cor: Preto (0.0, 0.0, 0.0) com 40% de opacidade (0.4)
+    glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), 0.0, 0.0, 0.0, 0.4)
+    
+    glDrawArrays(GL_TRIANGLE_FAN, 0, len(vertices))
+    
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
+    glDisable(GL_BLEND)
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+    glBindVertexArray(0)
+    glDeleteBuffers(1, [vbo])
+    glDeleteVertexArrays(1, [vao])

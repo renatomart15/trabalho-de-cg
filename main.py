@@ -4,8 +4,9 @@ from OpenGL.GL.shaders import compileProgram, compileShader
 import glfw
 import pyrr
 import numpy as np
+import math
 
-# Importações dos nossos novos submódulos e configurações organizadas
+# Importações dos nossos submódulos e configurações organizadas
 from config import *
 from regras_combate import validar_movimento, verificar_inimigo, calcular_distancia_ataque
 from estado_jogo import EstadoJogo
@@ -16,6 +17,54 @@ from tabuleiro import Tabuleiro
 
 projection = None
 game = None  # Objeto gerenciador do EstadoGlobal
+
+def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
+    """Desenha um círculo plano escuro e translúcido rente ao chão para simular a sombra de unidades voadoras."""
+    num_segmentos = 16
+    # Vértice central (Y levemente acima do chão em 0.01 para evitar z-fighting/piscados na malha)
+    vertices = [[x_centro, 0.01, z_centro]] 
+    
+    for i in range(num_segmentos + 1):
+        angulo = i * (2.0 * math.pi / num_segmentos)
+        x = x_centro + math.cos(angulo) * raio
+        z = z_centro + math.sin(angulo) * raio
+        vertices.append([x, 0.01, z])
+        
+    vertices = np.array(vertices, dtype=np.float32)
+
+    vao = glGenVertexArrays(1)
+    vbo = glGenBuffers(1)
+    
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+    
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
+    
+    model_loc = glGetUniformLocation(shader_program, "model")
+    glUniformMatrix4fv(model_loc, 1, GL_FALSE, pyrr.matrix44.create_identity())
+    
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, 0)
+    
+    # Habilitamos o Blending temporariamente para que a sombra pareça realista e translúcida
+    glEnable(GL_BLEND)
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+    
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
+    # Cor: Preto (0.0, 0.0, 0.0) com 40% de opacidade (0.4)
+    glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), 0.0, 0.0, 0.0, 0.4)
+    
+    glDrawArrays(GL_TRIANGLE_FAN, 0, len(vertices))
+    
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
+    glDisable(GL_BLEND)
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+    glBindVertexArray(0)
+    glDeleteBuffers(1, [vbo])
+    glDeleteVertexArrays(1, [vao])
 
 def gerenciar_teclado(window, key, scancode, action, mods):
     global game
@@ -69,7 +118,7 @@ def gerenciar_teclado(window, key, scancode, action, mods):
                 print("Peça solta.")
                 return
 
-            # Destino vazio -> Move e passa o turno
+            # Destino vazio -> Move validando o caminho e o terreno (passando game.tabuleiro)
             if alvo_id == 0:
                 if validar_movimento(origem_row, orig_col, game.cursor_row, game.cursor_col, game.peca_selecionada, game.tabuleiro):
                     hp_atual = game.hp_unidades.pop((origem_row, orig_col), HP_INICIAL.get(game.peca_selecionada, 3))
@@ -80,7 +129,7 @@ def gerenciar_teclado(window, key, scancode, action, mods):
                     print("Peça movida com sucesso!")
                     game.alternar_turno()
                 else:
-                    print("Movimento fora do alcance permitido para esta unidade!")
+                    print("Movimento inválido! Fora de alcance ou bloqueado por água/obstáculos.")
 
     # 4. Botão de Ataque Direto (A)
     elif key == glfw.KEY_A and game.estado_seletor == MODO_MOVIMENTACAO:
@@ -188,8 +237,21 @@ def main():
                     meu_trator.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
                 elif id_entidade == 2: 
                     minha_escavadeira.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
+                
                 elif id_entidade == 10: 
+                    # Efeito de Levitação: Calcula uma oscilação vertical baseada no seno do tempo
+                    offset_levitacao = 0.5 + math.sin(tempo_atual * 3.0) * 0.12
+                    altura_original = meu_mosquito.altura
+                    
+                    # Aplica a altura somada com a oscilação e desenha
+                    meu_mosquito.altura = altura_original + offset_levitacao
                     meu_mosquito.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 5.0)
+                    meu_mosquito.altura = altura_original  # Restaura a propriedade
+                    
+                    # Desenha a sombra dinâmica no chão (encolhe conforme o mosquito sobe)
+                    raio_dinamico = 0.28 - (offset_levitacao * 0.1)
+                    desenhar_sombra_circulo(vertex_shader, x_mundo, z_mundo, raio=raio_dinamico)
+
                 elif id_entidade == 11: 
                     barata.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 8.0)
                 elif id_entidade == 50: 
@@ -210,7 +272,7 @@ def main():
         else:
             minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=0)
 
-        # Renderização da grade de projeção ativa
+        # Renderização da grade de previsão ativa (Respeitando caminhos por água)
         if game.estado_seletor == MODO_MOVIMENTACAO and game.pos_selecionada is not None:
             origem_row, orig_col = game.pos_selecionada
             limite_ataque = ALCANCE_ATAQUE.get(game.peca_selecionada, 1)
@@ -219,6 +281,7 @@ def main():
                 for c in range(8):
                     if r == origem_row and c == orig_col: continue
 
+                    # Passando game.tabuleiro para validar caminhos na previsão tática visual
                     pode_mover = validar_movimento(origem_row, orig_col, r, c, game.peca_selecionada, game.tabuleiro)
                     dist_ataque = calcular_distancia_ataque(origem_row, orig_col, r, c, game.peca_selecionada)
                     pode_atacar = dist_ataque <= limite_ataque
