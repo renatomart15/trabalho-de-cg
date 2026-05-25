@@ -71,7 +71,7 @@ def gerenciar_teclado(window, key, scancode, action, mods):
 
             # Destino vazio -> Move e passa o turno
             if alvo_id == 0:
-                if validar_movimento(origem_row, orig_col, game.cursor_row, game.cursor_col, game.peca_selecionada):
+                if validar_movimento(origem_row, orig_col, game.cursor_row, game.cursor_col, game.peca_selecionada, game.tabuleiro):
                     hp_atual = game.hp_unidades.pop((origem_row, orig_col), HP_INICIAL.get(game.peca_selecionada, 3))
                     game.tabuleiro.entities[origem_row][orig_col] = 0
                     game.tabuleiro.entities[game.cursor_row][game.cursor_col] = game.peca_selecionada
@@ -219,7 +219,7 @@ def main():
                 for c in range(8):
                     if r == origem_row and c == orig_col: continue
 
-                    pode_mover = validar_movimento(origem_row, orig_col, r, c, game.peca_selecionada)
+                    pode_mover = validar_movimento(origem_row, orig_col, r, c, game.peca_selecionada, game.tabuleiro)
                     dist_ataque = calcular_distancia_ataque(origem_row, orig_col, r, c, game.peca_selecionada)
                     pode_atacar = dist_ataque <= limite_ataque
                     
