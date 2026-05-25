@@ -8,6 +8,40 @@ from tabuleiro import Tabuleiro
 
 projection = None
 
+# Novos estados para o seletor de ações
+MODO_ATAQUE = 2
+
+# Definição de HP padrão para cada tipo de unidade
+HP_INICIAL = {
+    1: 5,  # Trator: 5 HP
+    2: 4,  # Escavadeira: 4 HP
+    10: 3, # Mosquito: 3 HP
+    11: 3  # Barata: 3 HP
+}
+
+# Definição de Dano de cada unidade
+DANO_UNIDADE = {
+    1: 2,  # Trator tira 2 de HP
+    2: 3,  # Escavadeira tira 3 de HP
+    10: 1, # Mosquito tira 1 de HP
+    11: 2  # Barata tira 2 de HP
+}
+
+# Define o alcance do ataque de cada unidade (em blocos de distância)
+ALCANCE_MOVIMENTO = {
+    1: 2,  # Trator anda até 2 blocos
+    2: 1,  # <<<<< MUDADO AQUI: Escavadeira agora anda apenas 1 bloco!
+    10: 2, # Mosquito anda até 2 blocos
+    11: 2  # Barata anda até 2 blocos
+}
+
+ALCANCE_ATAQUE = {
+    1: 1,  # Trator: ataca a 1 bloco
+    2: 2,  # Escavadeira: ataca a 2 blocos (com aquela regra especial)
+    10: 1, # Mosquito: ataca a 1 bloco
+    11: 1  # Barata: ataca a 1 bloco
+}
+
 TURNO_JOGADOR = 0
 TURNO_INIMIGO = 1
 estado_atual = TURNO_JOGADOR
@@ -77,35 +111,56 @@ def desenhar_borda_cursor(shader_program, x_centro, z_centro, cor_rgb=[1.0, 1.0,
     glDeleteBuffers(1, [vbo])
     glDeleteVertexArrays(1, [vao])
 
-def gerenciar_teclado(window, tecla, codigo_scancode, acao, modificadores):
-    global cursor_row, cursor_col
-    global estado_seletor, peca_selecionada, pos_selecionada, estado_atual, meu_tabuleiro
+def realizar_ataque_logica(alvo_r, alvo_c):
+    global peca_selecionada, pos_selecionada, estado_seletor, estado_atual, hp_unidades
+    
+    alvo_id = meu_tabuleiro.entities[alvo_r][alvo_c]
+    dano = DANO_UNIDADE.get(peca_selecionada, 1)
+    hp_atual = hp_unidades.get((alvo_r, alvo_c), 3) - dano
+    
+    print(f"💥 BUM! Peça {peca_selecionada} atacou Peça {alvo_id} causando {dano} de dano!")
 
-    # Só processa o movimento quando a tecla for APERTADA (PRESS)
-    if acao == glfw.PRESS:
-        # Movimento para Cima (W ou Seta para Cima)
-        if tecla == glfw.KEY_W or tecla == glfw.KEY_UP:
-            if cursor_row > 0:
-                cursor_row -= 1
-                
-        # Movimento para Baixo (S)
-        elif tecla == glfw.KEY_S or tecla == glfw.KEY_DOWN:
-            if cursor_row < 7:
-                cursor_row += 1
-                
-        # Movimento para Esquerda (A)
-        elif tecla == glfw.KEY_A or tecla == glfw.KEY_LEFT:
-            if cursor_col > 0:
-                cursor_col -= 1
-                
-        # Movimento para Direita (D)
-        elif tecla == glfw.KEY_D or tecla == glfw.KEY_RIGHT:
-            if cursor_col < 7:
-                cursor_col += 1
-                
-        # Botão de Ação (Espaço ou Enter)
-        elif tecla == glfw.KEY_SPACE or tecla == glfw.KEY_ENTER:
-            # --- ETAPA 1: SELECIONAR A PEÇA ---
+    if hp_atual <= 0:
+        print(f"💀 A Peça {alvo_id} em [{alvo_r}][alvo_c] foi completamente destruída!")
+        meu_tabuleiro.entities[alvo_r][alvo_c] = 0
+        hp_unidades.pop((alvo_r, alvo_c), None)
+    else:
+        hp_unidades[(alvo_r, alvo_c)] = hp_atual
+        print(f"Peça sobrevivente restou com {hp_atual} de HP.")
+
+    # Como o ataque foi concluído, encerra o turno desta peça obrigatoriamente
+    peca_selecionada = None
+    pos_selecionada = None
+    estado_seletor = MODO_NAVEGACAO
+    estado_atual = TURNO_INIMIGO if estado_atual == TURNO_JOGADOR else TURNO_JOGADOR
+    print(f"Turno alterado! Agora é a vez do: {estado_atual}")
+
+def gerenciar_teclado(window, key, scancode, action, mods):
+    global cursor_row, cursor_col, estado_seletor, peca_selecionada, pos_selecionada, estado_atual, hp_unidades
+    global ALCANCE_MOVIMENTO, ALCANCE_ATAQUE
+
+    if action == glfw.PRESS or action == glfw.REPEAT:
+        # Movimentação básica do cursor
+        if key == glfw.KEY_UP and cursor_row > 0:
+            cursor_row -= 1
+        elif key == glfw.KEY_DOWN and cursor_row < 7:
+            cursor_row += 1
+        elif key == glfw.KEY_LEFT and cursor_col > 0:
+            cursor_col -= 1
+        elif key == glfw.KEY_RIGHT and cursor_col < 7:
+            cursor_col += 1
+        
+        # --- TECLA DE CANCELAR / SOLTAR A PEÇA (BACKSPACE ou ESC) ---
+        elif (key == glfw.KEY_BACKSPACE or key == glfw.KEY_ESCAPE) and estado_seletor == MODO_MOVIMENTACAO:
+            print(f"Seleção da peça {peca_selecionada} cancelada!")
+            peca_selecionada = None
+            pos_selecionada = None
+            estado_seletor = MODO_NAVEGACAO
+
+        # --- BOTÃO DE AÇÃO PRINCIPAL (ESPAÇO) ---
+        elif key == glfw.KEY_SPACE:
+            
+            # ETAPA 1: SELECIONAR A PEÇA
             if estado_seletor == MODO_NAVEGACAO:
                 id_peca = meu_tabuleiro.entities[cursor_row][cursor_col]
                 
@@ -113,61 +168,139 @@ def gerenciar_teclado(window, tecla, codigo_scancode, acao, modificadores):
                     peca_selecionada = id_peca
                     pos_selecionada = (cursor_row, cursor_col)
                     estado_seletor = MODO_MOVIMENTACAO
-                    print(f"Peça {id_peca} selecionada em [{cursor_row}][{cursor_col}]. Escolha o destino!")
+                    print(f"🤖 Peça {id_peca} selecionada. Espaço para MOVER ou 'A' para ATACAR daqui!")
                 
                 elif estado_atual == TURNO_INIMIGO and id_peca in [10, 11]:
                     peca_selecionada = id_peca
                     pos_selecionada = (cursor_row, cursor_col)
                     estado_seletor = MODO_MOVIMENTACAO
-                    print(f"Inseto {id_peca} selecionado em [{cursor_row}][{cursor_col}]. Escolha o destino!")
-                
-                else:
-                    print("Nenhuma peça sua nesta posição!")
+                    print(f"🪲 Peça {id_peca} selecionada. Espaço para MOVER ou 'A' para ATACAR daqui!")
 
-            # --- ETAPA 2: MOVER A PEÇA ---
-            # --- ETAPA 2: MOVER A PEÇA (COM VALIDAÇÃO DE ALCANCE) ---
+            # ETAPA 2: REALIZAR A MOVIMENTAÇÃO (CLICOU EM CASA VAZIA)
             elif estado_seletor == MODO_MOVIMENTACAO:
-                destino_id = meu_tabuleiro.entities[cursor_row][cursor_col]
+                alvo_id = meu_tabuleiro.entities[cursor_row][cursor_col]
                 origem_row, orig_col = pos_selecionada
 
-                # 1. Calcula a Distância de Manhattan (passos verticais + passos horizontais)
-                distancia = abs(cursor_row - origem_row) + abs(cursor_col - orig_col)
+                # Clicar na própria posição -> Solta a peça
+                if (cursor_row, cursor_col) == pos_selecionada:
+                    print("Peça solta.")
+                    peca_selecionada = None
+                    pos_selecionada = None
+                    estado_seletor = MODO_NAVEGACAO
+                    return
+
+                # Casa vazia -> Tenta andar
+                if alvo_id == 0:
+                    diff_r = abs(cursor_row - origem_row)
+                    diff_r = abs(cursor_row - origem_row)
+                    diff_c = abs(cursor_col - orig_col)
+                    
+                    movimento_valido = False
+                    
+                    if peca_selecionada == 2: # Escavadeira
+                        if max(diff_r, diff_c) <= 1:
+                            movimento_valido = True
+                    else: # Trator e Insetos
+                        limite_passos = ALCANCE_MOVIMENTO.get(peca_selecionada, 2)
+                        if (diff_r + diff_c) <= limite_passos:
+                            movimento_valido = True
+
+                    if movimento_valido:
+                        # Executa o movimento na matriz
+                        hp_atual = hp_unidades.pop((origem_row, orig_col), HP_INICIAL.get(peca_selecionada, 3))
+                        meu_tabuleiro.entities[origem_row][orig_col] = 0
+                        meu_tabuleiro.entities[cursor_row][cursor_col] = peca_selecionada
+                        hp_unidades[(cursor_row, cursor_col)] = hp_atual
+
+                        print("Peça movida! Turno finalizado por movimento.")
+                        
+                        # <<<<< MUDANÇA CRÍTICA AQUI >>>>>
+                        # Em vez de ir para o MODO_ATAQUE, limpamos a seleção e passamos o turno imediatamente!
+                        peca_selecionada = None
+                        pos_selecionada = None
+                        estado_seletor = MODO_NAVEGACAO
+                        estado_atual = TURNO_INIMIGO if estado_atual == TURNO_JOGADOR else TURNO_JOGADOR
+                        print(f"Vez do: {estado_atual}")
+                    else:
+                        if peca_selecionada == 2:
+                            print("⚠️ Escavadeira só anda 1 quadrado (reto ou diagonal).")
+                        else:
+                            print(f"Movimento inválido! Limite: {ALCANCE_MOVIMENTO.get(peca_selecionada, 2)} bloco(s).")
+
+        # --- BOTÃO DE ATAQUE DIRETO (TECLA A) ---
+        elif key == glfw.KEY_A and estado_seletor == MODO_MOVIMENTACAO:
+            if pos_selecionada is None:
+                return
                 
-                # Descobre o limite de passos para a peça atual (padrão 2 se não listado)
-                limite_passos = ALCANCE_MOVIMENTO.get(peca_selecionada, 2)
+            atacante_row, atacante_col = pos_selecionada
+            diff_r = abs(cursor_row - atacante_row)
+            diff_c = abs(cursor_col - atacante_col)
+            dist_ataque = diff_r + diff_c
+            
+            # Regra da diagonal imediata da Escavadeira
+            if peca_selecionada == 2 and diff_r == 1 and diff_c == 1:
+                dist_ataque = 1
 
-                # Regra A: O destino deve estar vazio (0) e dentro do limite de passos
-                if destino_id == 0 and distancia <= limite_passos:
-                    # Executa o movimento na matriz
-                    meu_tabuleiro.entities[origem_row][orig_col] = 0
-                    meu_tabuleiro.entities[cursor_row][cursor_col] = peca_selecionada
-                    
-                    print(f"Peça movida para [{cursor_row}][{cursor_col}] (Distância: {distancia}/{limite_passos})!")
+            alvo_id = meu_tabuleiro.entities[cursor_row][cursor_col]
+            limite_ataque = ALCANCE_ATAQUE.get(peca_selecionada, 1)
 
-                    # Limpa a seleção e volta ao modo navegação
-                    peca_selecionada = None
-                    pos_selecionada = None
-                    estado_seletor = MODO_NAVEGACAO
+            eh_inimigo = (peca_selecionada in [1, 2] and alvo_id in [10, 11]) or (peca_selecionada in [10, 11] and id_peca in [1, 2])
+            eh_inimigo = (peca_selecionada in [1, 2] and alvo_id in [10, 11]) or (peca_selecionada in [10, 11] and alvo_id in [1, 2])
 
-                    # Passa o turno automaticamente
-                    estado_atual = TURNO_INIMIGO if estado_atual == TURNO_JOGADOR else TURNO_JOGADOR
-                    print(f"Turno alterado! Agora é a vez do Turno: {estado_atual}")
+            if eh_inimigo and dist_ataque <= limite_ataque:
+                realizar_ataque_logica(cursor_row, cursor_col)
+                
+                # <<<<< MUDANÇA CRÍTICA AQUI >>>>>
+                # Após atacar a partir do lugar atual, limpa tudo e passa o turno imediatamente!
+                print("Ataque realizado! Turno finalizado por ataque.")
+                peca_selecionada = None
+                pos_selecionada = None
+                estado_seletor = MODO_NAVEGACAO
+                estado_atual = TURNO_INIMIGO if estado_atual == TURNO_JOGADOR else TURNO_JOGADOR
+                print(f"Vez do: {estado_atual}")
+            else:
+                print("Alvo inválido ou fora do alcance de ataque a partir da sua posição atual!")
 
-                elif (cursor_row, cursor_col) == pos_selecionada:
-                    # Cancelar seleção ao clicar na mesma peça
-                    print("Seleção cancelada.")
-                    peca_selecionada = None
-                    pos_selecionada = None
-                    estado_seletor = MODO_NAVEGACAO
-                    
-                elif distancia > limite_passos:
-                    # Bloqueio por distância muito longa
-                    print(f"Muito longe! O {peca_selecionada} só move {limite_passos} blocos. Tentou mover {distancia}.")
-                    
-                else:
-                    print("Espaço ocupado! Escolha um bloco vazio.")
-                    
-        print(f"Cursor movido para: Linha {cursor_row}, Coluna {cursor_col}")
+        # --- BOTÃO DE PASSAR TURNO MANUAL (TECLA P) ---
+        elif key == glfw.KEY_P:
+            print("Turno passado voluntariamente.")
+            peca_selecionada = None
+            pos_selecionada = None
+            estado_seletor = MODO_NAVEGACAO
+            estado_atual = TURNO_INIMIGO if estado_atual == TURNO_JOGADOR else TURNO_JOGADOR
+            print(f"Vez do: {estado_atual}")
+        # --- BOTÃO DE ATAQUE (TECLA A) ---
+        elif key == glfw.KEY_A and estado_seletor in [MODO_MOVIMENTACAO, MODO_ATAQUE]:
+            if pos_selecionada is None:
+                return
+                
+            atacante_row, atacante_col = pos_selecionada
+            diff_r = abs(cursor_row - atacante_row)
+            diff_c = abs(cursor_col - atacante_col)
+            dist_ataque = diff_r + diff_c
+            
+            # Regra da diagonal imediata da Escavadeira (ID 2)
+            if peca_selecionada == 2 and diff_r == 1 and diff_c == 1:
+                dist_ataque = 1
+
+            alvo_id = meu_tabuleiro.entities[cursor_row][cursor_col]
+            limite_ataque = ALCANCE_ATAQUE.get(peca_selecionada, 1)
+
+            eh_inimigo = (peca_selecionada in [1, 2] and alvo_id in [10, 11]) or (peca_selecionada in [10, 11] and alvo_id in [1, 2])
+
+            if eh_inimigo and dist_ataque <= limite_ataque:
+                realizar_ataque_logica(cursor_row, cursor_col)
+            else:
+                print("Alvo inválido ou fora do alcance de ataque!")
+
+        # --- BOTÃO DE PASSAR TURNO (TECLA P) ---
+        elif key == glfw.KEY_P:
+            print("Turno finalizado.")
+            peca_selecionada = None
+            pos_selecionada = None
+            estado_seletor = MODO_NAVEGACAO
+            estado_atual = TURNO_INIMIGO if estado_atual == TURNO_JOGADOR else TURNO_JOGADOR
+            print(f"Vez do: {estado_atual}")
 
 def inicializar_shaders(vertex_path, fragment_path):
     with open(vertex_path, "r") as f:
@@ -194,6 +327,64 @@ def mapear_clique_mouse(window, botao, acao, modificadores):
     if botao == glfw.MOUSE_BUTTON_LEFT and acao == glfw.PRESS:
         x_pixel, y_pixel = glfw.get_cursor_pos(window)
         print(f"Clique detectado na tela: Pixels X={x_pixel:.1f}, Y={y_pixel:.1f}")
+
+def desenhar_barra_vida(shader_program, x_centro, z_centro, hp_atual, hp_maximo):
+    """
+    Desenha pequenos quadradinhos de vida flutuando logo acima da unidade.
+    Cada ponto de HP atual será um quadradinho verde, e o HP perdido fica cinza escuro.
+    """
+    y_flutuante = 1.3  # Altura acima da peça (ajuste conforme o tamanho do modelo)
+    tamanho_bloco = 0.08  # Tamanho de cada quadradinho de vida
+    espacamento = 0.2    # Espaço entre o centro de cada quadradinho
+
+    # Calcula o ponto de partida à esquerda para centralizar os blocos
+    inicio_x = x_centro - ((hp_maximo - 1) * espacamento) / 2.0
+
+    for i in range(hp_maximo):
+        x_bloco = inicio_x + (i * espacamento)
+        
+        # Define a cor: Verde se a peça ainda tem esse ponto de vida, Cinza se perdeu
+        if i < hp_atual:
+            cor_rgb = [0.2, 0.9, 0.2]  # Verde vivo
+        else:
+            cor_rgb = [0.2, 0.2, 0.2]  # Vermelho escuro ou cinza (vida perdida)
+
+        # Vértices do quadradinho vertical (virado ligeiramente para a câmera em X/Y)
+        vertices = np.array([
+            [x_bloco - tamanho_bloco, y_flutuante - tamanho_bloco, z_centro],
+            [x_bloco + tamanho_bloco, y_flutuante - tamanho_bloco, z_centro],
+            [x_bloco + tamanho_bloco, y_flutuante + tamanho_bloco, z_centro],
+            [x_bloco - tamanho_bloco, y_flutuante + tamanho_bloco, z_centro]
+        ], dtype=np.float32)
+
+        # Compila e envia para a GPU temporariamente
+        vao = glGenVertexArrays(1)
+        vbo = glGenBuffers(1)
+        
+        glBindVertexArray(vao)
+        glBindBuffer(GL_ARRAY_BUFFER, vbo)
+        glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+        
+        glEnableVertexAttribArray(0)
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
+        
+        model_loc = glGetUniformLocation(shader_program, "model")
+        glUniformMatrix4fv(model_loc, 1, GL_FALSE, pyrr.matrix44.create_identity())
+        
+        glActiveTexture(GL_TEXTURE0)
+        glBindTexture(GL_TEXTURE_2D, 0)
+        
+        glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
+        glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), cor_rgb[0], cor_rgb[1], cor_rgb[2], 1.0)
+        
+        # Desenha o quadrado preenchido
+        glDrawArrays(GL_TRIANGLE_FAN, 0, 4)
+        
+        glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
+        glBindBuffer(GL_ARRAY_BUFFER, 0)
+        glBindVertexArray(0)
+        glDeleteBuffers(1, [vbo])
+        glDeleteVertexArrays(1, [vao])
 
 def main():
     # Avisa o Python que vamos modificar a instância global aqui dentro
@@ -231,6 +422,17 @@ def main():
     
     # --- AJUSTE AQUI: O tabuleiro só é criado AGORA, com a GPU devidamente ligada e pronta ---
     meu_tabuleiro = Tabuleiro()
+
+    # Dentro da função main(), logo após criar o 'meu_tabuleiro':
+    global hp_unidades
+    hp_unidades = {}
+    
+    # Mapeia a vida inicial de todas as peças encontradas no tabuleiro
+    for r in range(8):
+        for c in range(8):
+            id_peca = meu_tabuleiro.entities[r][c]
+            if id_peca != 0:
+                hp_unidades[(r, c)] = HP_INICIAL.get(id_peca, 3)
     
     meu_trator = Modelo3DComTextura("assets/trator.obj", "assets/trator_textura.jpeg", escala=0.4, altura=0.3)
     minha_casa = Modelo3DComTextura("assets/casa.obj", "assets/casa_textura.jpeg", escala=0.001, altura=-0.3)
@@ -248,6 +450,9 @@ def main():
         glUseProgram(vertex_shader)
         glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "view"), 1, GL_FALSE, view)
         glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "projection"), 1, GL_FALSE, projection)
+
+        # <<<<< CORREÇÃO 1: RESETAR O MODO DE COR SÓLIDA PARA AS TEXTURAS VOLTAREM >>>>>
+        glUniform1i(glGetUniformLocation(vertex_shader, "u_use_solid_color"), 0)
 
         meu_tabuleiro.draw(vertex_shader)
 
@@ -271,38 +476,74 @@ def main():
                 elif id_entidade == 50: 
                     minha_casa.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=0)
         
-        # --- 3. DESENHAR PONTEIRO VISUAL DO CURSOR E ÁREA DE MOVIMENTO ---
+        # --- 3. DESENHAR PONTEIRO VISUAL DO CURSOR E ÁREAS DE AÇÃO ---
         x_cursor_mundo = cursor_col - 3.5
         z_cursor_mundo = cursor_row - 3.5
 
         # A) Desenha a seta na posição do cursor
-        if estado_seletor == MODO_MOVIMENTACAO:
+        if estado_seletor in [MODO_MOVIMENTACAO, MODO_ATAQUE]:
             minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 15.0)
         else:
             minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=0)
 
-        # B) SE UMA PEÇA ESTIVER SELECIONADA: Mostra a malha de alcance
+        # B) SE UMA PEÇA ESTIVER SELECIONADA: Mostra a malha de ações (Apenas em MODO_MOVIMENTACAO)
         if estado_seletor == MODO_MOVIMENTACAO and pos_selecionada is not None:
             origem_row, orig_col = pos_selecionada
-            limite_passos = ALCANCE_MOVIMENTO.get(peca_selecionada, 2)
+            
+            if peca_selecionada == 2:
+                limite_passos = 1
+            else:
+                limite_passos = ALCANCE_MOVIMENTO.get(peca_selecionada, 2)
+                
+            limite_ataque = ALCANCE_ATAQUE.get(peca_selecionada, 1)
 
             for r in range(8):
                 for c in range(8):
-                    dist = abs(r - origem_row) + abs(c - orig_col)
+                    if r == origem_row and c == orig_col:
+                        continue
+
+                    diff_row = abs(r - origem_row)
+                    diff_col = abs(c - orig_col)
+                    
+                    if peca_selecionada == 2:
+                        pode_mover = max(diff_row, diff_col) <= limite_passos
+                    else:
+                        pode_mover = (diff_row + diff_col) <= limite_passos
+                    
+                    dist_ataque = diff_row + diff_col
+                    if peca_selecionada == 2 and diff_row == 1 and diff_col == 1:
+                        dist_ataque = 1
+
+                    pode_atacar = dist_ataque <= limite_ataque
                     id_ocupante = meu_tabuleiro.entities[r][c]
+                    x_valido = c - 3.5
+                    z_valido = r - 3.5
 
-                    if dist <= limite_passos and id_ocupante == 0:
-                        x_valido = c - 3.5
-                        z_valido = r - 3.5
-                        # [1.0, 1.0, 1.0] garante cor branca pura com brilho máximo no shader
-                        desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.35)
+                    # Inimigos Reais atacáveis a partir da posição atual
+                    if id_ocupante != 0:
+                        eh_inimigo = (peca_selecionada in [1, 2] and id_ocupante in [10, 11]) or (peca_selecionada in [10, 11] and id_ocupante in [1, 2])
+                        if eh_inimigo and pode_atacar:
+                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 0.1, 0.1], tamanho=0.35)
 
-        # C) Desenha a borda do cursor principal por cima (com tamanho 0.5 padrão)
+                    # Espaços vazios (Zonas de projeção)
+                    else:
+                        if pode_mover and pode_atacar:
+                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[0.6, 0.0, 0.0], tamanho=0.35)
+                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.22)
+                        elif pode_mover:
+                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.35)
+                        elif pode_atacar:
+                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[0.6, 0.0, 0.0], tamanho=0.35)
+
+        # C) CONFIGURAÇÃO DE COR DO CURSOR PRINCIPAL
         if estado_seletor == MODO_MOVIMENTACAO:
+            # Modo Seleção: Amarelo
             desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[1.0, 0.8, 0.0], tamanho=0.5)
         else:
+            # Modo Navegação Livre: Verde
             desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[0.2, 0.8, 0.2], tamanho=0.5)
-        
+
+        # <<<<< CORREÇÃO 2: ATUALIZAR A TELA E RECOLHER OS EVENTOS DO TECLADO >>>>>
         glfw.swap_buffers(window)
         glfw.poll_events()
 
