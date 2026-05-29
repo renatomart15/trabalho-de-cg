@@ -8,7 +8,7 @@ import math
 
 # Importações dos nossos submódulos e configurações organizadas
 from config import *
-from regras_combate import validar_movimento, verificar_inimigo, calcular_distancia_ataque
+from regras_combate import*
 from estado_jogo import EstadoJogo
 from render_utils import desenhar_borda_cursor, desenhar_barra_vida
 
@@ -98,13 +98,13 @@ def gerenciar_teclado(window, key, scancode, action, mods):
                 game.peca_selecionada = id_peca
                 game.pos_selecionada = (game.cursor_row, game.cursor_col)
                 game.estado_seletor = MODO_MOVIMENTACAO
-                print(f"🤖 Robô {id_peca} selecionado. Espaço para MOVER ou 'A' para ATACAR!")
+                print(f"Robô {id_peca} selecionado. Espaço para MOVER ou 'A' para ATACAR!")
             
             elif game.turno_atual == TURNO_INIMIGO and id_peca in [10, 11]:
                 game.peca_selecionada = id_peca
                 game.pos_selecionada = (game.cursor_row, game.cursor_col)
                 game.estado_seletor = MODO_MOVIMENTACAO
-                print(f"🪲 Inseto {id_peca} selecionado. Espaço para MOVER ou 'A' para ATACAR!")
+                print(f"Inseto {id_peca} selecionado. Espaço para MOVER ou 'A' para ATACAR!")
 
         # B) Mover Peça Selecionada
         elif game.estado_seletor == MODO_MOVIMENTACAO:
