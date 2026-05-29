@@ -196,8 +196,8 @@ def main():
     redimensionar_janela(window, largura_tela, altura_tela)
     vertex_shader = inicializar_shaders("shaders/vertex_shader.glsl", "shaders/fragment_shader.glsl")
     
-    # Inicializa tabuleiro e estado unificado do jogo
-    meu_tabuleiro = Tabuleiro()
+    # AGORA PODES ESCOLHER O MAPA PASSANDO O ID (1, 2 ou 3):
+    meu_tabuleiro = Tabuleiro(mapa_id=3) 
     game = EstadoJogo(meu_tabuleiro)
     
     # Carregamento de Malhas e Assets Técnicos

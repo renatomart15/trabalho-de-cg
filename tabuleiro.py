@@ -38,68 +38,87 @@ class Tabuleiro:
         self.tex_concreto = self.carregar_textura_tabuleiro("assets/concreto.jpg")
 
     def setup_map(self):
-        """Configura designs de terreno e posicionamentos iniciais diferentes para cada mapa."""
+        """
+        Configura designs de terreno com rotas livres para peças terrestres 
+        (sem rios contínuos) e mantém o posicionamento Defensores-Esquerda vs Atacantes-Direita.
+        """
         
         if self.mapa_id == 1:
-            # --- MAPA 1: O RIO CENTRAL (Seu mapa original) ---
-            # Curso do Rio Jaguaribe na coluna 3
-            for i in range(8):
-                self.grid[i][3] = 1
+            # --- MAPA 1: O RIO INTERROMPIDO (Lagos Centrais) ---
+            # Em vez de uma coluna inteira de água, deixamos pontes de terra nas pontas e no centro
+            self.grid[0][3] = 1  # Lago ao Norte
+            self.grid[1][3] = 1
+            self.grid[3][3] = 1  # Lago Central
+            self.grid[4][3] = 1
+            self.grid[6][3] = 1  # Lago ao Sul
+            self.grid[7][3] = 1
+            # Linhas 2 e 5 na coluna 3 são GRAMA (0), servindo como pontes naturais!
+
+            # Cidades/Zonas de concreto (Lado Esquerdo)
+            self.grid[2][1] = 2
+            self.grid[5][2] = 2
             
-            # Cidades/Zonas de concreto
-            self.grid[2][2] = 2
-            self.grid[5][5] = 2
+            # [DEFENSORES] - Lado Esquerdo
+            self.entities[2][0] = 1   # Trator
+            self.entities[5][0] = 2   # Escavadeira
+            self.entities[2][1] = 50  # Casa 1
+            self.entities[5][2] = 50  # Casa 2
             
-            # Posicionamento Inicial das Unidades e Estruturas
-            self.entities[0][0] = 1   # Trator
-            self.entities[1][2] = 2   # Escavadeira
-            self.entities[7][7] = 10  # Mosquito
-            self.entities[6][5] = 11  # Barata
-            self.entities[2][2] = 50  # Casa 1
-            self.entities[5][5] = 50  # Casa 2
+            # [ATACANTES] - Lado Direito
+            self.entities[1][6] = 10  # Muriçoca
+            self.entities[6][6] = 11  # Barata
 
         elif self.mapa_id == 2:
-            # --- MAPA 2: OS CANAIS CRUZADOS (Corte Diagonal) ---
-            # O rio cruza o mapa na diagonal, limitando o avanço terrestre direto
-            for i in range(8):
-                self.grid[i][i] = 1 
+            # --- MAPA 2: OS CANAIS FRAGMENTADOS (Diagonal Aberta) ---
+            # Rompemos a diagonal do rio para criar passagens terrestres livres
+            self.grid[0][0] = 1
+            self.grid[1][1] = 1
+            # (2,2) é livre
+            self.grid[3][3] = 1
+            self.grid[4][4] = 1
+            # (5,5) é livre
+            self.grid[6][6] = 1
+            self.grid[7][7] = 1
             
-            # Cidades protegidas nos cantos e no centro tático
-            self.grid[0][7] = 2
-            self.grid[7][0] = 2
-            self.grid[3][4] = 2
+            # Zonas urbanas recuadas na retaguarda esquerda
+            self.grid[1][2] = 2
+            self.grid[4][1] = 2
+            self.grid[6][2] = 2
             
-            # Posicionamento Inicial (Separados pelo rio diagonal!)
+            # [DEFENSORES] - Lado Esquerdo
             self.entities[2][0] = 1   # Trator
-            self.entities[4][1] = 2   # Escavadeira
-            self.entities[1][6] = 10  # Mosquito (Muriçoca)
-            self.entities[2][5] = 11  # Barata
+            self.entities[5][0] = 2   # Escavadeira
+            self.entities[1][2] = 50  
+            self.entities[4][1] = 50  
+            self.entities[6][2] = 50  
             
-            self.entities[0][7] = 50  # Casa no canto superior direito
-            self.entities[3][4] = 50  # Casa no centro comercial
+            # [ATACANTES] - Lado Direito
+            self.entities[2][6] = 10  # Muriçoca
+            self.entities[5][6] = 11  # Barata
 
         elif self.mapa_id == 3:
-            # --- MAPA 3: A CHEIA DO JAGUARIBE (Inundação) ---
-            # Uma grande cruz de água central isolando o mapa em 4 quadrantes secos
-            for i in range(8):
-                self.grid[3][i] = 1  # Linha 3 inteira é água
-                self.grid[4][i] = 1  # Linha 4 inteira é água
-                self.grid[i][3] = 1  # Coluna 3 inteira é água
+            # --- MAPA 3: PEQUENOS AÇUDES (Quadrantes Conectados) ---
+            # Transformamos a grande cruz de inundação em 4 poças/açudes isolados no centro
+            self.grid[2][3] = 1
+            self.grid[2][4] = 1
+            self.grid[5][3] = 1
+            self.grid[5][4] = 1
 
-            # Cidades isoladas nas "ilhas" restantes de terra firme
+            # Cidades nas ilhas do Quadrante Esquerdo
             self.grid[1][1] = 2
-            self.grid[1][6] = 2
-            self.grid[6][6] = 2
+            self.grid[6][1] = 2
+            self.grid[1][2] = 2
 
-            # Posicionamento Inicial tático
-            self.entities[0][1] = 1   # Trator
-            self.entities[1][0] = 2   # Escavadeira
-            self.entities[7][6] = 10  # Mosquito (Ideal para flutuar no meio do lago)
-            self.entities[6][7] = 11  # Barata
-            
-            self.entities[1][1] = 50  # Casa na ilha noroeste
-            self.entities[1][6] = 50  # Casa na ilha nordeste
-            self.entities[6][6] = 50  # Casa na ilha sudeste
+            # [DEFENSORES] - Quadrante Esquerdo
+            self.entities[1][0] = 1   # Trator
+            self.entities[6][0] = 2   # Escavadeira
+            self.entities[1][1] = 50  
+            self.entities[1][2] = 50  
+            self.entities[6][1] = 50  
+
+            # [ATACANTES] - Quadrante Direito
+            self.entities[1][6] = 10  # Muriçoca
+            self.entities[6][6] = 11  # Barata
 
     def generate_tile_vbo(self):
         """Gera o cubo geométrico elemental que serve para renderizar cada bloco do grid."""
