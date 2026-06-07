@@ -5,6 +5,8 @@ import glfw
 import pyrr
 import numpy as np
 import math
+from PIL import Image
+
 
 # Importações dos nossos submódulos e configurações organizadas
 from config import *
@@ -15,8 +17,107 @@ from render_utils import desenhar_borda_cursor, desenhar_barra_vida
 from models import Modelo3DComTextura 
 from tabuleiro import Tabuleiro
 
+estado_app = "MENU"
+opcao_menu = 1
 projection = None
 game = None  # Objeto gerenciador do EstadoGlobal
+
+def carregar_textura_menu(caminho):
+    #   Carregar uma imagem 2d do disco para ser usada na inteface
+
+    img = Image.open(caminho)
+    img = img.transpose(Image.FLIP_TOP_BOTTOM)
+    img_data = img.convert("RGBA").tobytes()
+    width, height = img.size
+
+    tex_id = glGenTextures(1)
+    glBindTexture(GL_TEXTURE_2D, tex_id)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
+    glBindTexture(GL_TEXTURE_2D, 0)
+
+    return tex_id
+
+def desenhar_botao_texturizado(shader_program, x_centro, y_centro, larg, alt, texture_id):
+    """Desenha um retângulo 2D na tela aplicando uma imagem/textura."""
+    # Matriz com Posição (X, Y, Z) e Coordenadas de Textura (U, V)
+    vertices = np.array([
+        [x_centro - larg/2, y_centro - alt/2, 0.0,   0.0, 0.0],
+        [x_centro + larg/2, y_centro - alt/2, 0.0,   1.0, 0.0],
+        [x_centro + larg/2, y_centro + alt/2, 0.0,   1.0, 1.0],
+        [x_centro - larg/2, y_centro + alt/2, 0.0,   0.0, 1.0]
+    ], dtype=np.float32)
+
+    vao = glGenVertexArrays(1)
+    vbo = glGenBuffers(1)
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+    
+    # Atributo Posição (stride de 5 floats)
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(0))
+    # Atributo UV (começa depois dos 3 primeiros floats)
+    glEnableVertexAttribArray(1)
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(3 * vertices.itemsize))
+    
+    # Anula as matrizes 3D para renderizar em 2D absoluto
+    identidade = pyrr.matrix44.create_identity()
+    glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, identidade)
+    glUniformMatrix4fv(glGetUniformLocation(shader_program, "view"), 1, GL_FALSE, identidade)
+    glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, identidade)
+    
+    # Ativa a textura
+    glActiveTexture(GL_TEXTURE0)
+    glBindTexture(GL_TEXTURE_2D, texture_id)
+    glUniform1i(glGetUniformLocation(shader_program, "u_texture"), 0)
+    
+    # Desliga a cor sólida para o Shader usar a imagem
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
+    
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4)
+    
+    glBindTexture(GL_TEXTURE_2D, 0)
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+    glBindVertexArray(0)
+    glDeleteBuffers(1, [vbo])
+    glDeleteVertexArrays(1, [vao])
+
+def desenhar_botao_menu(shader_program, x_centro, y_centro, larg, alt, cor_rgb):
+    """Desenha um retângulo preenchido em 2D direto na tela usando coordenadas NDC (-1 a 1)."""
+    vertices = np.array([
+        [x_centro - larg/2, y_centro - alt/2, 0.0],
+        [x_centro + larg/2, y_centro - alt/2, 0.0],
+        [x_centro + larg/2, y_centro + alt/2, 0.0],
+        [x_centro - larg/2, y_centro + alt/2, 0.0]
+    ], dtype=np.float32)
+
+    vao = glGenVertexArrays(1)
+    vbo = glGenBuffers(1)
+    glBindVertexArray(vao)
+    glBindBuffer(GL_ARRAY_BUFFER, vbo)
+    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
+    glEnableVertexAttribArray(0)
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
+    
+    # Anula as matrizes 3D para renderizar em 2D absoluto na tela
+    identidade = pyrr.matrix44.create_identity()
+    glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, identidade)
+    glUniformMatrix4fv(glGetUniformLocation(shader_program, "view"), 1, GL_FALSE, identidade)
+    glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, identidade)
+    
+    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
+    glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), cor_rgb[0], cor_rgb[1], cor_rgb[2], 1.0)
+    
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 4)
+    
+    glBindBuffer(GL_ARRAY_BUFFER, 0)
+    glBindVertexArray(0)
+    glDeleteBuffers(1, [vbo])
+    glDeleteVertexArrays(1, [vao])
 
 def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
     """Desenha um círculo plano escuro e translúcido rente ao chão para simular a sombra de unidades voadoras."""
@@ -67,9 +168,24 @@ def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
     glDeleteVertexArrays(1, [vao])
 
 def gerenciar_teclado(window, key, scancode, action, mods):
-    global game
+
+    global game, estado_app, opcao_menu
+
     if action != glfw.PRESS and action != glfw.REPEAT:
         return
+
+
+    if estado_app == "MENU":
+        if key == glfw.KEY_LEFT and opcao_menu > 1:
+            opcao_menu -= 1
+        elif key == glfw.KEY_RIGHT and opcao_menu < 3:
+            opcao_menu += 1
+        elif key == glfw.KEY_SPACE or key == glfw.KEY_ENTER:
+            game = EstadoJogo(Tabuleiro(mapa_id=opcao_menu))
+            estado_app = "JOGO"
+        return
+
+    if game is None: return
 
     # 1. Movimentação do Cursor
     if key == glfw.KEY_UP and game.cursor_row > 0:
@@ -169,7 +285,7 @@ def redimensionar_janela(window, largura, altura):
     projection = pyrr.matrix44.create_perspective_projection_matrix(45.0, largura / altura, 0.1, 100.0)
 
 def main():
-    global game, projection
+    global game, projection, estado_app
 
     if not glfw.init():
         return
@@ -197,8 +313,8 @@ def main():
     vertex_shader = inicializar_shaders("shaders/vertex_shader.glsl", "shaders/fragment_shader.glsl")
     
     # AGORA PODES ESCOLHER O MAPA PASSANDO O ID (1, 2 ou 3):
-    meu_tabuleiro = Tabuleiro(mapa_id=3) 
-    game = EstadoJogo(meu_tabuleiro)
+    #meu_tabuleiro = Tabuleiro(mapa_id=3) 
+    #game = EstadoJogo(meu_tabuleiro)
     
     # Carregamento de Malhas e Assets Técnicos
     meu_trator = Modelo3DComTextura("assets/trator.obj", "assets/trator_textura.jpeg", escala=0.4, altura=0.3)
@@ -210,103 +326,152 @@ def main():
 
     view = pyrr.matrix44.create_look_at(eye=[9, 9, 9], target=[0, 0, 0], up=[0, 1, 0])
 
+
+    print("\n[ Tela Inicial ]")
+    print("Presione 1, 2 ou 3 na janela do jogo para escolher o mapa e iniciar!\n")
+
+    text_btao_mapa1 = carregar_textura_menu("assets/btn_mapa1.png")
+    text_btao_mapa2 = carregar_textura_menu("assets/btn_mapa2.png")
+    text_btao_mapa3 = carregar_textura_menu("assets/btn_mapa3.png")
+
+
     while not glfw.window_should_close(window):
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glClearColor(0.12, 0.12, 0.12, 1.0) 
+         
+        if estado_app == "MENU":
+            
+            #---Fundo Cinza---
+            glClearColor(0.15, 0.15, 0.15, 1.0)
+            glUseProgram(vertex_shader)
 
-        glUseProgram(vertex_shader)
-        glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "view"), 1, GL_FALSE, view)
-        glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "projection"), 1, GL_FALSE, projection)
-        glUniform1i(glGetUniformLocation(vertex_shader, "u_use_solid_color"), 0)
+            # Desativa o desenho de profundidade
+            glDisable(GL_DEPTH_TEST)
 
-        game.tabuleiro.draw(vertex_shader)
-        tempo_atual = glfw.get_time()
 
-        # --- Renderização de Modelos e Vidas ---
-        for row in range(8):
-            for col in range(8):
-                x_mundo = col - 3.5
-                z_mundo = row - 3.5
-                id_entidade = game.tabuleiro.entities[row][col]
+            # Habilita transparência
+            glEnable(GL_BLEND)
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-                if id_entidade == 0:
-                    continue
+            tamanho_borda_larg = 0.38
+            tamanho_borda_alt = 0.53
+            cor_branca = [1.0, 1.0, 1.0]
 
-                # Desenho das malhas 3D
-                if id_entidade == 1: 
-                    meu_trator.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
-                elif id_entidade == 2: 
-                    minha_escavadeira.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
+
+            # 1. Desenha a borda de selação atrás do botão
+            if opcao_menu == 1:
+                desenhar_botao_menu(vertex_shader, -0.5, 0.0, tamanho_borda_larg, tamanho_borda_alt, cor_branca)     
+            elif opcao_menu == 2:
+                desenhar_botao_menu(vertex_shader, 0.0, 0.0, tamanho_borda_larg, tamanho_borda_alt, cor_branca)      
+            elif opcao_menu == 3:
+                desenhar_botao_menu(vertex_shader, 0.5, 0.0, tamanho_borda_larg, tamanho_borda_alt, cor_branca)      
+
+
+            # 2. Desenha as suas texturar por cima
+            desenhar_botao_texturizado(vertex_shader, -0.5, 0.0, 0.35, 0.5, text_btao_mapa1)   # Botão [1] - Verde
+            desenhar_botao_texturizado(vertex_shader,  0.0, 0.0, 0.35, 0.5, text_btao_mapa2)   # Botão [2] - Azul
+            desenhar_botao_texturizado(vertex_shader,  0.5, 0.0, 0.35, 0.5, text_btao_mapa3)   # Botão [3] - Vermelho
+
+            glDisable(GL_BLEND)
+            glEnable(GL_DEPTH_TEST)
+
+        elif estado_app == "JOGO" and game is not None:
+
                 
-                elif id_entidade == 10: 
-                    # Efeito de Levitação: Calcula uma oscilação vertical baseada no seno do tempo
-                    offset_levitacao = 0.5 + math.sin(tempo_atual * 3.0) * 0.12
-                    altura_original = meu_mosquito.altura
+            glClearColor(0.12, 0.12, 0.12, 1.0)
+            glUseProgram(vertex_shader)
+            glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "view"), 1, GL_FALSE, view)
+            glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "projection"), 1, GL_FALSE, projection)
+            glUniform1i(glGetUniformLocation(vertex_shader, "u_use_solid_color"), 0)
+            
+            game.tabuleiro.draw(vertex_shader)
+            tempo_atual = glfw.get_time()
+
+
+            # --- Renderização de Modelos e Vidas ---
+            for row in range(8):
+                for col in range(8):
+                    x_mundo = col - 3.5
+                    z_mundo = row - 3.5
+                    id_entidade = game.tabuleiro.entities[row][col]
+
+                    if id_entidade == 0:
+                        continue
+
+                    # Desenho das malhas 3D
+                    if id_entidade == 1: 
+                        meu_trator.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
+                    elif id_entidade == 2: 
+                        minha_escavadeira.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
                     
-                    # Aplica a altura somada com a oscilação e desenha
-                    meu_mosquito.altura = altura_original + offset_levitacao
-                    meu_mosquito.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 5.0)
-                    meu_mosquito.altura = altura_original  # Restaura a propriedade
-                    
-                    # Desenha a sombra dinâmica no chão (encolhe conforme o mosquito sobe)
-                    raio_dinamico = 0.28 - (offset_levitacao * 0.1)
-                    desenhar_sombra_circulo(vertex_shader, x_mundo, z_mundo, raio=raio_dinamico)
+                    elif id_entidade == 10: 
+                        # Efeito de Levitação: Calcula uma oscilação vertical baseada no seno do tempo
+                        offset_levitacao = 0.5 + math.sin(tempo_atual * 3.0) * 0.12
+                        altura_original = meu_mosquito.altura
+                        
+                        # Aplica a altura somada com a oscilação e desenha
+                        meu_mosquito.altura = altura_original + offset_levitacao
+                        meu_mosquito.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 5.0)
+                        meu_mosquito.altura = altura_original  # Restaura a propriedade
+                        
+                        # Desenha a sombra dinâmica no chão (encolhe conforme o mosquito sobe)
+                        raio_dinamico = 0.28 - (offset_levitacao * 0.1)
+                        desenhar_sombra_circulo(vertex_shader, x_mundo, z_mundo, raio=raio_dinamico)
 
-                elif id_entidade == 11: 
-                    barata.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 8.0)
-                elif id_entidade == 50: 
-                    minha_casa.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=0)
+                    elif id_entidade == 11: 
+                        barata.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 8.0)
+                    elif id_entidade == 50: 
+                        minha_casa.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=0)
 
-                # Desenho da interface de vida flutuante (Robôs, Insetos e Casas)
-                if id_entidade in [1, 2, 10, 11, 50]:
-                    hp_atual = game.hp_unidades.get((row, col), 3)
-                    hp_max = HP_INICIAL.get(id_entidade, 3)
-                    desenhar_barra_vida(vertex_shader, x_mundo, z_mundo, hp_atual, hp_max, view)
-        
-        # --- Desenho do Cursor e Projeções Táticas ---
-        x_cursor_mundo = game.cursor_col - 3.5
-        z_cursor_mundo = game.cursor_row - 3.5
+                    # Desenho da interface de vida flutuante (Robôs, Insetos e Casas)
+                    if id_entidade in [1, 2, 10, 11, 50]:
+                        hp_atual = game.hp_unidades.get((row, col), 3)
+                        hp_max = HP_INICIAL.get(id_entidade, 3)
+                        desenhar_barra_vida(vertex_shader, x_mundo, z_mundo, hp_atual, hp_max, view)
+            
+            # --- Desenho do Cursor e Projeções Táticas ---
+            x_cursor_mundo = game.cursor_col - 3.5
+            z_cursor_mundo = game.cursor_row - 3.5
 
-        if game.estado_seletor in [MODO_MOVIMENTACAO, MODO_ATAQUE]:
-            minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 15.0)
-        else:
-            minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=0)
+            if game.estado_seletor in [MODO_MOVIMENTACAO, MODO_ATAQUE]:
+                minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=tempo_atual * 15.0)
+            else:
+                minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=0)
 
-        # Renderização da grade de previsão ativa (Respeitando caminhos por água)
-        if game.estado_seletor == MODO_MOVIMENTACAO and game.pos_selecionada is not None:
-            origem_row, orig_col = game.pos_selecionada
-            limite_ataque = ALCANCE_ATAQUE.get(game.peca_selecionada, 1)
+            # Renderização da grade de previsão ativa (Respeitando caminhos por água)
+            if game.estado_seletor == MODO_MOVIMENTACAO and game.pos_selecionada is not None:
+                origem_row, orig_col = game.pos_selecionada
+                limite_ataque = ALCANCE_ATAQUE.get(game.peca_selecionada, 1)
 
-            for r in range(8):
-                for c in range(8):
-                    if r == origem_row and c == orig_col: continue
+                for r in range(8):
+                    for c in range(8):
+                        if r == origem_row and c == orig_col: continue
 
-                    # Passando game.tabuleiro para validar caminhos na previsão tática visual
-                    pode_mover = validar_movimento(origem_row, orig_col, r, c, game.peca_selecionada, game.tabuleiro)
-                    dist_ataque = calcular_distancia_ataque(origem_row, orig_col, r, c, game.peca_selecionada)
-                    pode_atacar = dist_ataque <= limite_ataque
-                    
-                    id_ocupante = game.tabuleiro.entities[r][c]
-                    x_valido = c - 3.5
-                    z_valido = r - 3.5
+                        # Passando game.tabuleiro para validar caminhos na previsão tática visual
+                        pode_mover = validar_movimento(origem_row, orig_col, r, c, game.peca_selecionada, game.tabuleiro)
+                        dist_ataque = calcular_distancia_ataque(origem_row, orig_col, r, c, game.peca_selecionada)
+                        pode_atacar = dist_ataque <= limite_ataque
+                        
+                        id_ocupante = game.tabuleiro.entities[r][c]
+                        x_valido = c - 3.5
+                        z_valido = r - 3.5
 
-                    if id_ocupante != 0:
-                        if verificar_inimigo(game.peca_selecionada, id_ocupante) and pode_atacar:
-                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 0.1, 0.1], tamanho=0.35)
-                    else:
-                        if pode_mover and pode_atacar:
-                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[0.6, 0.0, 0.0], tamanho=0.35)
-                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.22)
-                        elif pode_mover:
-                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.35)
-                        elif pode_atacar:
-                            desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[0.6, 0.0, 0.0], tamanho=0.35)
+                        if id_ocupante != 0:
+                            if verificar_inimigo(game.peca_selecionada, id_ocupante) and pode_atacar:
+                                desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 0.1, 0.1], tamanho=0.35)
+                        else:
+                            if pode_mover and pode_atacar:
+                                desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[0.6, 0.0, 0.0], tamanho=0.35)
+                                desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.22)
+                            elif pode_mover:
+                                desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[1.0, 1.0, 1.0], tamanho=0.35)
+                            elif pode_atacar:
+                                desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[0.6, 0.0, 0.0], tamanho=0.35)
 
-        # Define a cor do cursor principal
-        if game.estado_seletor == MODO_MOVIMENTACAO:
-            desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[1.0, 0.8, 0.0], tamanho=0.5)
-        else:
-            desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[0.2, 0.8, 0.2], tamanho=0.5)
+            # Define a cor do cursor principal
+            if game.estado_seletor == MODO_MOVIMENTACAO:
+                desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[1.0, 0.8, 0.0], tamanho=0.5)
+            else:
+                desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[0.2, 0.8, 0.2], tamanho=0.5)
 
         glfw.swap_buffers(window)
         glfw.poll_events()
