@@ -5,14 +5,12 @@ import glfw
 import pyrr
 import numpy as np
 import math
-from PIL import Image
-
 
 # Importações dos nossos submódulos e configurações organizadas
 from config import *
 from regras_combate import*
 from estado_jogo import EstadoJogo
-from render_utils import desenhar_borda_cursor, desenhar_barra_vida
+from render_utils import desenhar_borda_cursor, desenhar_barra_vida, carregar_textura_menu, desenhar_botao_texturizado, desenhar_botao_menu, desenhar_sombra_circulo
 
 from models import Modelo3DComTextura 
 from tabuleiro import Tabuleiro
@@ -22,150 +20,6 @@ opcao_menu = 1
 projection = None
 game = None  # Objeto gerenciador do EstadoGlobal
 
-def carregar_textura_menu(caminho):
-    #   Carregar uma imagem 2d do disco para ser usada na inteface
-
-    img = Image.open(caminho)
-    img = img.transpose(Image.FLIP_TOP_BOTTOM)
-    img_data = img.convert("RGBA").tobytes()
-    width, height = img.size
-
-    tex_id = glGenTextures(1)
-    glBindTexture(GL_TEXTURE_2D, tex_id)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, img_data)
-    glBindTexture(GL_TEXTURE_2D, 0)
-
-    return tex_id
-
-def desenhar_botao_texturizado(shader_program, x_centro, y_centro, larg, alt, texture_id):
-    """Desenha um retângulo 2D na tela aplicando uma imagem/textura."""
-    # Matriz com Posição (X, Y, Z) e Coordenadas de Textura (U, V)
-    vertices = np.array([
-        [x_centro - larg/2, y_centro - alt/2, 0.0,   0.0, 0.0],
-        [x_centro + larg/2, y_centro - alt/2, 0.0,   1.0, 0.0],
-        [x_centro + larg/2, y_centro + alt/2, 0.0,   1.0, 1.0],
-        [x_centro - larg/2, y_centro + alt/2, 0.0,   0.0, 1.0]
-    ], dtype=np.float32)
-
-    vao = glGenVertexArrays(1)
-    vbo = glGenBuffers(1)
-    glBindVertexArray(vao)
-    glBindBuffer(GL_ARRAY_BUFFER, vbo)
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-    
-    # Atributo Posição (stride de 5 floats)
-    glEnableVertexAttribArray(0)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(0))
-    # Atributo UV (começa depois dos 3 primeiros floats)
-    glEnableVertexAttribArray(1)
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(3 * vertices.itemsize))
-    
-    # Anula as matrizes 3D para renderizar em 2D absoluto
-    identidade = pyrr.matrix44.create_identity()
-    glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, identidade)
-    glUniformMatrix4fv(glGetUniformLocation(shader_program, "view"), 1, GL_FALSE, identidade)
-    glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, identidade)
-    
-    # Ativa a textura
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, texture_id)
-    glUniform1i(glGetUniformLocation(shader_program, "u_texture"), 0)
-    
-    # Desliga a cor sólida para o Shader usar a imagem
-    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
-    
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4)
-    
-    glBindTexture(GL_TEXTURE_2D, 0)
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    glBindVertexArray(0)
-    glDeleteBuffers(1, [vbo])
-    glDeleteVertexArrays(1, [vao])
-
-def desenhar_botao_menu(shader_program, x_centro, y_centro, larg, alt, cor_rgb):
-    """Desenha um retângulo preenchido em 2D direto na tela usando coordenadas NDC (-1 a 1)."""
-    vertices = np.array([
-        [x_centro - larg/2, y_centro - alt/2, 0.0],
-        [x_centro + larg/2, y_centro - alt/2, 0.0],
-        [x_centro + larg/2, y_centro + alt/2, 0.0],
-        [x_centro - larg/2, y_centro + alt/2, 0.0]
-    ], dtype=np.float32)
-
-    vao = glGenVertexArrays(1)
-    vbo = glGenBuffers(1)
-    glBindVertexArray(vao)
-    glBindBuffer(GL_ARRAY_BUFFER, vbo)
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-    glEnableVertexAttribArray(0)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
-    
-    # Anula as matrizes 3D para renderizar em 2D absoluto na tela
-    identidade = pyrr.matrix44.create_identity()
-    glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, identidade)
-    glUniformMatrix4fv(glGetUniformLocation(shader_program, "view"), 1, GL_FALSE, identidade)
-    glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, identidade)
-    
-    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
-    glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), cor_rgb[0], cor_rgb[1], cor_rgb[2], 1.0)
-    
-    glDrawArrays(GL_TRIANGLE_FAN, 0, 4)
-    
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    glBindVertexArray(0)
-    glDeleteBuffers(1, [vbo])
-    glDeleteVertexArrays(1, [vao])
-
-def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
-    """Desenha um círculo plano escuro e translúcido rente ao chão para simular a sombra de unidades voadoras."""
-    num_segmentos = 16
-    # Vértice central (Y levemente acima do chão em 0.01 para evitar z-fighting/piscados na malha)
-    vertices = [[x_centro, 0.01, z_centro]] 
-    
-    for i in range(num_segmentos + 1):
-        angulo = i * (2.0 * math.pi / num_segmentos)
-        x = x_centro + math.cos(angulo) * raio
-        z = z_centro + math.sin(angulo) * raio
-        vertices.append([x, 0.01, z])
-        
-    vertices = np.array(vertices, dtype=np.float32)
-
-    vao = glGenVertexArrays(1)
-    vbo = glGenBuffers(1)
-    
-    glBindVertexArray(vao)
-    glBindBuffer(GL_ARRAY_BUFFER, vbo)
-    glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
-    
-    glEnableVertexAttribArray(0)
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
-    
-    model_loc = glGetUniformLocation(shader_program, "model")
-    glUniformMatrix4fv(model_loc, 1, GL_FALSE, pyrr.matrix44.create_identity())
-    
-    glActiveTexture(GL_TEXTURE0)
-    glBindTexture(GL_TEXTURE_2D, 0)
-    
-    # Habilitamos o Blending temporariamente para que a sombra pareça realista e translúcida
-    glEnable(GL_BLEND)
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
-    
-    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
-    # Cor: Preto (0.0, 0.0, 0.0) com 40% de opacidade (0.4)
-    glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), 0.0, 0.0, 0.0, 0.4)
-    
-    glDrawArrays(GL_TRIANGLE_FAN, 0, len(vertices))
-    
-    glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
-    glDisable(GL_BLEND)
-    
-    glBindBuffer(GL_ARRAY_BUFFER, 0)
-    glBindVertexArray(0)
-    glDeleteBuffers(1, [vbo])
-    glDeleteVertexArrays(1, [vao])
 
 def gerenciar_teclado(window, key, scancode, action, mods):
 
@@ -328,11 +182,41 @@ def main():
 
 
     print("\n[ Tela Inicial ]")
-    print("Presione 1, 2 ou 3 na janela do jogo para escolher o mapa e iniciar!\n")
 
     text_btao_mapa1 = carregar_textura_menu("assets/btn_mapa1.png")
     text_btao_mapa2 = carregar_textura_menu("assets/btn_mapa2.png")
     text_btao_mapa3 = carregar_textura_menu("assets/btn_mapa3.png")
+
+    tex_escavadeira_5 = carregar_textura_menu("assets/tratordedesmatamento5.png")
+    tex_escavadeira_4 = carregar_textura_menu("assets/tratordedesmatamento4.png")
+    tex_escavadeira_3 = carregar_textura_menu("assets/tratordedesmatamento3.png")
+    tex_escavadeira_2 = carregar_textura_menu("assets/tratordedesmatamento2.png")
+    tex_escavadeira_1 = carregar_textura_menu("assets/tratordedesmatamento1.png")
+
+    tex_mosquito_1 = carregar_textura_menu("assets/muricocamutante1.png")
+    tex_mosquito_2 = carregar_textura_menu("assets/muricocamutante2.png")
+    tex_mosquito_3 = carregar_textura_menu("assets/muricocamutante3.png")
+
+    tex_trator_1 = carregar_textura_menu("assets/tratoragricola1.png")
+    tex_trator_2 = carregar_textura_menu("assets/tratoragricola2.png")
+    tex_trator_3 = carregar_textura_menu("assets/tratoragricola3.png")
+    tex_trator_4 = carregar_textura_menu("assets/tratoragricola4.png")
+    tex_trator_5 = carregar_textura_menu("assets/tratoragricola5.png") 
+
+    tex_barata_1 = carregar_textura_menu("assets/baratamutante1.png")
+    tex_barata_2 = carregar_textura_menu("assets/baratamutante2.png")
+    tex_barata_3 = carregar_textura_menu("assets/baratamutante3.png")
+    tex_barata_4 = carregar_textura_menu("assets/baratamutante4.png")
+
+    tex_padrao = tex_trator_5
+
+    # Configuração dos Assets do HUD (Coloque isso logo após carregar as texturas)
+    texturas_hud = {
+        1:  {5: tex_trator_5, 4: tex_trator_4, 3: tex_trator_3, 2: tex_trator_2, 1: tex_trator_1},
+        2:  {4: tex_escavadeira_4, 3: tex_escavadeira_3, 2: tex_escavadeira_2, 1: tex_escavadeira_1},
+        10: {3: tex_mosquito_3, 2: tex_mosquito_2, 1: tex_mosquito_1},
+        11: {4: tex_barata_4, 3: tex_barata_3, 2: tex_barata_2, 1: tex_barata_1}
+    }
 
 
     while not glfw.window_should_close(window):
@@ -340,9 +224,11 @@ def main():
          
         if estado_app == "MENU":
             
-            #---Fundo Cinza---
+            #---Fuando Cinza---
             glClearColor(0.15, 0.15, 0.15, 1.0)
             glUseProgram(vertex_shader)
+
+            glUniform1i(glGetUniformLocation(vertex_shader, "u_use_lighting"), 0)
 
             # Desativa o desenho de profundidade
             glDisable(GL_DEPTH_TEST)
@@ -379,6 +265,27 @@ def main():
                 
             glClearColor(0.12, 0.12, 0.12, 1.0)
             glUseProgram(vertex_shader)
+
+            #---Ligar luz de Phong---
+            glUniform1i(glGetUniformLocation(vertex_shader, "u_use_lighting"), 1)
+            glUniform3f(glGetUniformLocation(vertex_shader, "viewPos"), 9.0, 9.0, 9.0) 
+
+
+            # LÓGICA DO SOL: Mapas 2 e 3 ensolarados, Mapa 1 nublado
+            if game.tabuleiro.mapa_id in [2, 3]:
+                # Sol do semiárido: Força reduzida para não estourar a textura,
+                # com um tom mais alaranjado/quente (R=0.85, G=0.65, B=0.45)
+                glUniform3f(glGetUniformLocation(vertex_shader, "lightPos"), 2.0, 18.0, 2.0)
+                glUniform3f(glGetUniformLocation(vertex_shader, "lightColor"), 1.0, 0.98, 0.92) 
+                glUniform1f(glGetUniformLocation(vertex_shader, "ambientStrength"), 0.45) 
+            else:
+                # Mapa 1: Nublado (Luz mais fraca, neutra e sem brilho forte)
+                glUniform3f(glGetUniformLocation(vertex_shader, "lightPos"), 0.0, 15.0, 0.0)
+                glUniform3f(glGetUniformLocation(vertex_shader, "lightColor"), 0.6, 0.6, 0.65) 
+                glUniform1f(glGetUniformLocation(vertex_shader, "ambientStrength"), 0.6)
+
+
+
             glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "view"), 1, GL_FALSE, view)
             glUniformMatrix4fv(glGetUniformLocation(vertex_shader, "projection"), 1, GL_FALSE, projection)
             glUniform1i(glGetUniformLocation(vertex_shader, "u_use_solid_color"), 0)
@@ -428,6 +335,10 @@ def main():
                         hp_max = HP_INICIAL.get(id_entidade, 3)
                         desenhar_barra_vida(vertex_shader, x_mundo, z_mundo, hp_atual, hp_max, view)
             
+            # Desliga a luz
+            glUniform1i(glGetUniformLocation(vertex_shader, "u_use_lighting"), 0)
+            x_cursor_mundo = game.cursor_col - 3.5
+
             # --- Desenho do Cursor e Projeções Táticas ---
             x_cursor_mundo = game.cursor_col - 3.5
             z_cursor_mundo = game.cursor_row - 3.5
@@ -472,6 +383,31 @@ def main():
                 desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[1.0, 0.8, 0.0], tamanho=0.5)
             else:
                 desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[0.2, 0.8, 0.2], tamanho=0.5)
+
+            if game.peca_selecionada is not None:
+
+                    # Desativando a profundidade para a HUD
+                glDisable(GL_DEPTH_TEST)
+
+                    #Ativa Blending
+                glEnable(GL_BLEND)
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
+
+                    # Define posição e tamanho da tela
+                x_placa = 0.65
+                y_placa = -0.65
+                larg_placa = 0.6
+                alt_placa = 0.5
+
+                hp_atual = game.hp_unidades.get(game.pos_selecionada, 0)
+                textura_para_desenhar = texturas_hud.get(game.peca_selecionada, {}).get(hp_atual, tex_padrao)
+
+                desenhar_botao_menu(vertex_shader, x_placa, y_placa, larg_placa + 0.02, alt_placa + 0.02, [1.0, 1.0, 1.0])                             
+
+                desenhar_botao_texturizado(vertex_shader, x_placa, y_placa, larg_placa, alt_placa, textura_para_desenhar)
+                
+                glDisable(GL_BLEND)
+                glEnable(GL_DEPTH_TEST)
 
         glfw.swap_buffers(window)
         glfw.poll_events()

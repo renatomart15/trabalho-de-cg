@@ -121,72 +121,79 @@ class Tabuleiro:
             self.entities[6][6] = 11  # Barata
 
     def generate_tile_vbo(self):
-        """Gera o cubo geométrico elemental que serve para renderizar cada bloco do grid."""
+        """Gera o cubo geométrico elemental com Vetores Normais para iluminação Phong."""
         self.vao = glGenVertexArrays(1)
         glBindVertexArray(self.vao)
         
-        # Array contendo posições (X, Y, Z) e Coordenadas de Textura (U, V) para um cubo completo
+        # Array contendo: Posição (X, Y, Z) | Textura (U, V) | Normal (NX, NY, NZ)
         vertices = np.array([
-            # Face Traseira
-            -0.5, -0.5, -0.5,  0.0, 0.0,
-             0.5, -0.5, -0.5,  1.0, 0.0,
-             0.5,  0.5, -0.5,  1.0, 1.0,
-             0.5,  0.5, -0.5,  1.0, 1.0,
-            -0.5,  0.5, -0.5,  0.0, 1.0,
-            -0.5, -0.5, -0.5,  0.0, 0.0,
+            # Face Traseira (Normal apontando para Z = -1)
+            -0.5, -0.5, -0.5,  0.0, 0.0,   0.0,  0.0, -1.0,
+             0.5, -0.5, -0.5,  1.0, 0.0,   0.0,  0.0, -1.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,   0.0,  0.0, -1.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,   0.0,  0.0, -1.0,
+            -0.5,  0.5, -0.5,  0.0, 1.0,   0.0,  0.0, -1.0,
+            -0.5, -0.5, -0.5,  0.0, 0.0,   0.0,  0.0, -1.0,
 
-            # Face Frontal
-            -0.5, -0.5,  0.5,  0.0, 0.0,
-             0.5, -0.5,  0.5,  1.0, 0.0,
-             0.5,  0.5,  0.5,  1.0, 1.0,
-             0.5,  0.5,  0.5,  1.0, 1.0,
-            -0.5,  0.5,  0.5,  0.0, 1.0,
-            -0.5, -0.5,  0.5,  0.0, 0.0,
+            # Face Frontal (Normal apontando para Z = 1)
+            -0.5, -0.5,  0.5,  0.0, 0.0,   0.0,  0.0,  1.0,
+             0.5, -0.5,  0.5,  1.0, 0.0,   0.0,  0.0,  1.0,
+             0.5,  0.5,  0.5,  1.0, 1.0,   0.0,  0.0,  1.0,
+             0.5,  0.5,  0.5,  1.0, 1.0,   0.0,  0.0,  1.0,
+            -0.5,  0.5,  0.5,  0.0, 1.0,   0.0,  0.0,  1.0,
+            -0.5, -0.5,  0.5,  0.0, 0.0,   0.0,  0.0,  1.0,
 
-            # Face Esquerda
-            -0.5,  0.5,  0.5,  1.0, 0.0,
-            -0.5,  0.5, -0.5,  1.0, 1.0,
-            -0.5, -0.5, -0.5,  0.0, 1.0,
-            -0.5, -0.5, -0.5,  0.0, 1.0,
-            -0.5, -0.5,  0.5,  0.0, 0.0,
-            -0.5,  0.5,  0.5,  1.0, 0.0,
+            # Face Esquerda (Normal apontando para X = -1)
+            -0.5,  0.5,  0.5,  1.0, 0.0,  -1.0,  0.0,  0.0,
+            -0.5,  0.5, -0.5,  1.0, 1.0,  -1.0,  0.0,  0.0,
+            -0.5, -0.5, -0.5,  0.0, 1.0,  -1.0,  0.0,  0.0,
+            -0.5, -0.5, -0.5,  0.0, 1.0,  -1.0,  0.0,  0.0,
+            -0.5, -0.5,  0.5,  0.0, 0.0,  -1.0,  0.0,  0.0,
+            -0.5,  0.5,  0.5,  1.0, 0.0,  -1.0,  0.0,  0.0,
 
-            # Face Direita
-            0.5,  0.5,  0.5,  1.0, 0.0,
-            0.5,  0.5, -0.5,  1.0, 1.0,
-            0.5, -0.5, -0.5,  0.0, 1.0,
-            0.5, -0.5, -0.5,  0.0, 1.0,
-            0.5, -0.5,  0.5,  0.0, 0.0,
-            0.5,  0.5,  0.5,  1.0, 0.0,
+            # Face Direita (Normal apontando para X = 1)
+             0.5,  0.5,  0.5,  1.0, 0.0,   1.0,  0.0,  0.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,   1.0,  0.0,  0.0,
+             0.5, -0.5, -0.5,  0.0, 1.0,   1.0,  0.0,  0.0,
+             0.5, -0.5, -0.5,  0.0, 1.0,   1.0,  0.0,  0.0,
+             0.5, -0.5,  0.5,  0.0, 0.0,   1.0,  0.0,  0.0,
+             0.5,  0.5,  0.5,  1.0, 0.0,   1.0,  0.0,  0.0,
 
-            # Face Inferior
-            -0.5, -0.5, -0.5,  0.0, 1.0,
-             0.5, -0.5, -0.5,  1.0, 1.0,
-             0.5, -0.5,  0.5,  1.0, 0.0,
-             0.5, -0.5,  0.5,  1.0, 0.0,
-            -0.5, -0.5,  0.5,  0.0, 0.0,
-            -0.5, -0.5, -0.5,  0.0, 1.0,
+            # Face Inferior (Normal apontando para Y = -1)
+            -0.5, -0.5, -0.5,  0.0, 1.0,   0.0, -1.0,  0.0,
+             0.5, -0.5, -0.5,  1.0, 1.0,   0.0, -1.0,  0.0,
+             0.5, -0.5,  0.5,  1.0, 0.0,   0.0, -1.0,  0.0,
+             0.5, -0.5,  0.5,  1.0, 0.0,   0.0, -1.0,  0.0,
+            -0.5, -0.5,  0.5,  0.0, 0.0,   0.0, -1.0,  0.0,
+            -0.5, -0.5, -0.5,  0.0, 1.0,   0.0, -1.0,  0.0,
 
-            # Face Superior (Onde as entidades pisam de fato)
-            -0.5,  0.5, -0.5,  0.0, 1.0,
-             0.5,  0.5, -0.5,  1.0, 1.0,
-             0.5,  0.5,  0.5,  1.0, 0.0,
-             0.5,  0.5,  0.5,  1.0, 0.0,
-            -0.5,  0.5,  0.5,  0.0, 0.0,
-            -0.5,  0.5, -0.5,  0.0, 1.0
+            # Face Superior (Normal apontando para Y = 1) -> A face que recebe a luz do Sol
+            -0.5,  0.5, -0.5,  0.0, 1.0,   0.0,  1.0,  0.0,
+             0.5,  0.5, -0.5,  1.0, 1.0,   0.0,  1.0,  0.0,
+             0.5,  0.5,  0.5,  1.0, 0.0,   0.0,  1.0,  0.0,
+             0.5,  0.5,  0.5,  1.0, 0.0,   0.0,  1.0,  0.0,
+            -0.5,  0.5,  0.5,  0.0, 0.0,   0.0,  1.0,  0.0,
+            -0.5,  0.5, -0.5,  0.0, 1.0,   0.0,  1.0,  0.0
         ], dtype='float32')
 
         self.vbo = glGenBuffers(1)
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
         glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
 
-        # Atributo 0: Posição XYZ (Stride: 5 * 4 bytes = 20)
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(0))
+        # O Stride (salto) agora é de 8 floats (8 * 4 bytes = 32 bytes)
+        stride = 8 * vertices.itemsize
+
+        # Atributo 0: Posição XYZ 
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
 
-        # Atributo 1: Coordenadas de Textura UV (Deslocamento inicial de 3 floats)
-        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(3 * vertices.itemsize))
+        # Atributo 1: Coordenadas de Textura UV (Inicia após os primeiros 3 floats)
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(3 * vertices.itemsize))
         glEnableVertexAttribArray(1)
+        
+        # Atributo 2: Normais NX, NY, NZ (Inicia após os 5 primeiros floats)
+        glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(5 * vertices.itemsize))
+        glEnableVertexAttribArray(2)
 
         glBindBuffer(GL_ARRAY_BUFFER, 0)
         glBindVertexArray(0)
