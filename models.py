@@ -11,7 +11,6 @@ class Modelo3DComTextura:
         self.texture_id = None
         self.num_vertices = 0
         
-        # Guardamos as propriedades únicas deste modelo
         self.escala = escala
         self.altura = altura
         self.rotacao_inicial_y = rotacao_inicial_y
@@ -21,47 +20,37 @@ class Modelo3DComTextura:
         self.carregar_textura_gpu(texture_path)
 
     def carregar_obj_manual(self, obj_path):
-        # Listas para armazenar os dados brutos do arquivo
         vertices = []
         texturas = []
         normais = []
         dados_finais = []
 
-        # Lê o arquivo linha por linha para cruzar posições e UVs de forma garantida
         with open(obj_path, 'r') as f:
             for linha in f:
                 partes = linha.split()
                 if not partes:
                     continue
                 
-                # 'v' representa posição do vértice (X, Y, Z)
                 if partes[0] == 'v':
                     vertices.append([float(partes[1]), float(partes[2]), float(partes[3])])
-                # 'vt' representa coordenada de textura (U, V)
                 elif partes[0] == 'vt':
                     texturas.append([float(partes[1]), float(partes[2])])
-                # MUDANÇA 1: 'vn' representa o vetor normal (para onde a face aponta)
                 elif partes[0] == 'vn':
                     normais.append([float(partes[1]), float(partes[2]), float(partes[3])])
-                
-                # 'f' representa a face (triângulo) que une os índices
                 elif partes[0] == 'f':
                     for vertice_info in partes[1:]:
-                        # O formato de face costuma ser: indice_v/indice_vt/indice_vn
                         sub_partes = vertice_info.split('/')
                         idx_v = int(sub_partes[0]) - 1
-                        
-                        # Adiciona a posição XYZ
                         dados_finais.extend(vertices[idx_v])
                         
-                        # Adiciona coordenada de textura UV
+                        
                         if len(sub_partes) > 1 and sub_partes[1] != '':
                             idx_vt = int(sub_partes[1]) - 1
                             dados_finais.extend(texturas[idx_vt])
                         else:
                             dados_finais.extend([0.0, 0.0]) # Fallback UV
                             
-                        # MUDANÇA 2: Adiciona a Normal NX, NY, NZ
+                        
                         if len(sub_partes) > 2 and sub_partes[2] != '':
                             idx_vn = int(sub_partes[2]) - 1
                             dados_finais.extend(normais[idx_vn])
@@ -70,10 +59,10 @@ class Modelo3DComTextura:
 
         dados_array = np.array(dados_finais, dtype='float32')
         
-        # MUDANÇA 3: O Stride agora é 8 (3 posições + 2 texturas + 3 normais)
+        
         self.num_vertices = len(dados_array) // 8  
 
-        # Configuração do VAO e VBO na GPU
+        
         self.vao = glGenVertexArrays(1)
         glBindVertexArray(self.vao)
 
@@ -81,17 +70,12 @@ class Modelo3DComTextura:
         glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
         glBufferData(GL_ARRAY_BUFFER, dados_array.nbytes, dados_array, GL_STATIC_DRAW)
 
-        # MUDANÇA 4: Atualizando os "Pointers" para pular 8 espaços em vez de 5
-        
-        # Atributo 0: Posição (X, Y, Z)
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * dados_array.itemsize, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
         
-        # Atributo 1: Coordenadas de Textura (U, V) - Começa após o 3º float
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * dados_array.itemsize, ctypes.c_void_p(3 * dados_array.itemsize))
         glEnableVertexAttribArray(1)
         
-        # Atributo 2: Normais (NX, NY, NZ) - Começa após o 5º float (posição + textura)
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * dados_array.itemsize, ctypes.c_void_p(5 * dados_array.itemsize))
         glEnableVertexAttribArray(2)
 
@@ -124,11 +108,10 @@ class Modelo3DComTextura:
 
         model_loc = glGetUniformLocation(shader_program, "model")
         
-        # Usa a escala definida na criação do objeto
         matriz_escala = pyrr.matrix44.create_from_scale([self.escala, self.escala, self.escala]) 
         
         vibracao = np.sin(angulo_pa * 0.5) * 0.02
-        # Usa a altura definida na criação do objeto somada à vibração do motor
+
         matriz_posicao = pyrr.matrix44.create_from_translation([x, self.altura + vibracao, z])
         
         transformacao_final = pyrr.matrix44.multiply(matriz_escala, matriz_posicao)

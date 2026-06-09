@@ -45,10 +45,10 @@ def desenhar_borda_cursor(shader_program, x_centro, z_centro, cor_rgb=[1.0, 1.0,
 
 
 def desenhar_barra_vida(shader_program, x_centro, z_centro, hp_atual, hp_maximo, view_mat):
-    """Desenha a vida flutuante rotacionada perfeitamente (Billboard) para a tela."""
+    
     view_mat = np.array(view_mat, dtype=np.float32).reshape(4, 4)
 
-    # Extração dos eixos da tela a partir da matriz de View da Câmera
+
     cam_right = np.array([view_mat[0][0], view_mat[1][0], view_mat[2][0]], dtype=np.float32)
     cam_up    = np.array([view_mat[0][1], view_mat[1][1], view_mat[2][1]], dtype=np.float32)
 
@@ -103,8 +103,8 @@ def desenhar_barra_vida(shader_program, x_centro, z_centro, hp_atual, hp_maximo,
         glDeleteVertexArrays(1, [vao])
 
 def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
-    """Desenha um círculo plano escuro e translúcido rente ao chão para simular a sombra de unidades voadoras."""
-    # Criamos os vértices de um círculo (Triangle Fan)
+    
+    
     num_segmentos = 16
     vertices = [[x_centro, 0.01, z_centro]] # Vértice central (Y levemente acima do chão para evitar z-fighting)
     
@@ -132,12 +132,12 @@ def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, 0)
     
-    # Habilitamos o Blending para que a sombra pareça realista e translúcida
+    
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     
     glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
-    # Cor: Preto (0.0, 0.0, 0.0) com 40% de opacidade (0.4)
+    
     glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), 0.0, 0.0, 0.0, 0.4)
     
     glDrawArrays(GL_TRIANGLE_FAN, 0, len(vertices))
@@ -152,7 +152,7 @@ def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
 
 
 def carregar_textura_menu(caminho):
-    #   Carregar uma imagem 2d do disco para ser usada na inteface
+    
 
     img = Image.open(caminho)
     img = img.transpose(Image.FLIP_TOP_BOTTOM)
@@ -173,8 +173,7 @@ def carregar_textura_menu(caminho):
 
 
 def desenhar_botao_texturizado(shader_program, x_centro, y_centro, larg, alt, texture_id):
-    """Desenha um retângulo 2D na tela aplicando uma imagem/textura."""
-    # Matriz com Posição (X, Y, Z) e Coordenadas de Textura (U, V)
+    
     vertices = np.array([
         [x_centro - larg/2, y_centro - alt/2, 0.0,   0.0, 0.0],
         [x_centro + larg/2, y_centro - alt/2, 0.0,   1.0, 0.0],
@@ -188,25 +187,25 @@ def desenhar_botao_texturizado(shader_program, x_centro, y_centro, larg, alt, te
     glBindBuffer(GL_ARRAY_BUFFER, vbo)
     glBufferData(GL_ARRAY_BUFFER, vertices.nbytes, vertices, GL_STATIC_DRAW)
     
-    # Atributo Posição (stride de 5 floats)
+    
     glEnableVertexAttribArray(0)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(0))
-    # Atributo UV (começa depois dos 3 primeiros floats)
+    
     glEnableVertexAttribArray(1)
     glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * vertices.itemsize, ctypes.c_void_p(3 * vertices.itemsize))
     
-    # Anula as matrizes 3D para renderizar em 2D absoluto
+    
     identidade = pyrr.matrix44.create_identity()
     glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, identidade)
     glUniformMatrix4fv(glGetUniformLocation(shader_program, "view"), 1, GL_FALSE, identidade)
     glUniformMatrix4fv(glGetUniformLocation(shader_program, "projection"), 1, GL_FALSE, identidade)
     
-    # Ativa a textura
+    
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, texture_id)
     glUniform1i(glGetUniformLocation(shader_program, "u_texture"), 0)
     
-    # Desliga a cor sólida para o Shader usar a imagem
+    
     glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 0)
     
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4)
@@ -220,7 +219,7 @@ def desenhar_botao_texturizado(shader_program, x_centro, y_centro, larg, alt, te
 
 
 def desenhar_botao_menu(shader_program, x_centro, y_centro, larg, alt, cor_rgb):
-    """Desenha um retângulo preenchido em 2D direto na tela usando coordenadas NDC (-1 a 1)."""
+    
     vertices = np.array([
         [x_centro - larg/2, y_centro - alt/2, 0.0],
         [x_centro + larg/2, y_centro - alt/2, 0.0],
@@ -236,7 +235,7 @@ def desenhar_botao_menu(shader_program, x_centro, y_centro, larg, alt, cor_rgb):
     glEnableVertexAttribArray(0)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * vertices.itemsize, None)
     
-    # Anula as matrizes 3D para renderizar em 2D absoluto na tela
+    
     identidade = pyrr.matrix44.create_identity()
     glUniformMatrix4fv(glGetUniformLocation(shader_program, "model"), 1, GL_FALSE, identidade)
     glUniformMatrix4fv(glGetUniformLocation(shader_program, "view"), 1, GL_FALSE, identidade)
@@ -255,9 +254,9 @@ def desenhar_botao_menu(shader_program, x_centro, y_centro, larg, alt, cor_rgb):
 
 
 def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
-    """Desenha um círculo plano escuro e translúcido rente ao chão para simular a sombra de unidades voadoras."""
+    
     num_segmentos = 16
-    # Vértice central (Y levemente acima do chão em 0.01 para evitar z-fighting/piscados na malha)
+    
     vertices = [[x_centro, 0.01, z_centro]] 
     
     for i in range(num_segmentos + 1):
@@ -284,12 +283,12 @@ def desenhar_sombra_circulo(shader_program, x_centro, z_centro, raio=0.25):
     glActiveTexture(GL_TEXTURE0)
     glBindTexture(GL_TEXTURE_2D, 0)
     
-    # Habilitamos o Blending temporariamente para que a sombra pareça realista e translúcida
+    
     glEnable(GL_BLEND)
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
     
     glUniform1i(glGetUniformLocation(shader_program, "u_use_solid_color"), 1)
-    # Cor: Preto (0.0, 0.0, 0.0) com 40% de opacidade (0.4)
+    
     glUniform4f(glGetUniformLocation(shader_program, "u_solid_color"), 0.0, 0.0, 0.0, 0.4)
     
     glDrawArrays(GL_TRIANGLE_FAN, 0, len(vertices))

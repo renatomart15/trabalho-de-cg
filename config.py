@@ -1,5 +1,3 @@
-# config.py
-
 # Estados do Turno
 TURNO_JOGADOR = 0
 TURNO_INIMIGO = 1

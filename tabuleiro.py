@@ -3,11 +3,11 @@ import numpy as np
 from OpenGL.GL import *
 import pyrr
 from PIL import Image
-import ctypes  # Mantido para evitar NameError no uso de ctypes.c_void_p
+import ctypes  
 
 class Tabuleiro:
     def __init__(self, mapa_id=1):
-        # Guardamos qual é o mapa atual ativo
+
         self.mapa_id = mapa_id
 
         # 0: Chão comum (Grama)
@@ -24,28 +24,24 @@ class Tabuleiro:
         # 50: Casa (Edifícios Civis)
         self.entities = np.zeros((8, 8), dtype=int)
 
-        # Configura o design de terreno e posições das peças com base no mapa_id
+       
         self.setup_map()
 
-        # Inicialização dos Buffers Geométricos do OpenGL
+       
         self.vbo = None
         self.vao = None
         self.generate_tile_vbo()
 
-        # Carregamento das Texturas das Células
+       
         self.tex_grama = self.carregar_textura_tabuleiro("assets/grama.jpg")
         self.tex_agua = self.carregar_textura_tabuleiro("assets/agua.jpg")
         self.tex_concreto = self.carregar_textura_tabuleiro("assets/concreto.jpg")
 
     def setup_map(self):
-        """
-        Configura designs de terreno com rotas livres para peças terrestres 
-        (sem rios contínuos) e mantém o posicionamento Defensores-Esquerda vs Atacantes-Direita.
-        """
+        
         
         if self.mapa_id == 1:
-            # --- MAPA 1: O RIO INTERROMPIDO (Lagos Centrais) ---
-            # Em vez de uma coluna inteira de água, deixamos pontes de terra nas pontas e no centro
+        
             self.grid[0][3] = 1  # Lago ao Norte
             self.grid[1][3] = 1
             self.grid[3][3] = 1  # Lago Central
@@ -121,11 +117,9 @@ class Tabuleiro:
             self.entities[6][6] = 11  # Barata
 
     def generate_tile_vbo(self):
-        """Gera o cubo geométrico elemental com Vetores Normais para iluminação Phong."""
         self.vao = glGenVertexArrays(1)
         glBindVertexArray(self.vao)
         
-        # Array contendo: Posição (X, Y, Z) | Textura (U, V) | Normal (NX, NY, NZ)
         vertices = np.array([
             # Face Traseira (Normal apontando para Z = -1)
             -0.5, -0.5, -0.5,  0.0, 0.0,   0.0,  0.0, -1.0,
@@ -183,15 +177,12 @@ class Tabuleiro:
         # O Stride (salto) agora é de 8 floats (8 * 4 bytes = 32 bytes)
         stride = 8 * vertices.itemsize
 
-        # Atributo 0: Posição XYZ 
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(0))
         glEnableVertexAttribArray(0)
 
-        # Atributo 1: Coordenadas de Textura UV (Inicia após os primeiros 3 floats)
         glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(3 * vertices.itemsize))
         glEnableVertexAttribArray(1)
         
-        # Atributo 2: Normais NX, NY, NZ (Inicia após os 5 primeiros floats)
         glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, stride, ctypes.c_void_p(5 * vertices.itemsize))
         glEnableVertexAttribArray(2)
 
@@ -199,7 +190,6 @@ class Tabuleiro:
         glBindVertexArray(0)
 
     def draw(self, shader_program):
-        """Varre a matriz grid e desenha cada tile no mundo usando a textura correspondente."""
         glBindVertexArray(self.vao)
         model_loc = glGetUniformLocation(shader_program, "model")
         
@@ -208,14 +198,12 @@ class Tabuleiro:
         
         for row in range(8):
             for col in range(8):
-                # Centraliza o mapa de 8x8 na origem (0,0) do ambiente 3D
                 x_pos = col - 3.5
                 z_pos = row - 3.5
                 
                 translation = pyrr.matrix44.create_from_translation([x_pos, -0.5, z_pos])
                 glUniformMatrix4fv(model_loc, 1, GL_FALSE, translation)
                 
-                # Renderiza a textura correta mapeada na matriz de terrenos (self.grid)
                 tipo_terreno = self.grid[row][col]
                 if tipo_terreno == 1:    # Rio Jaguaribe (Água)
                     glBindTexture(GL_TEXTURE_2D, self.tex_agua)
@@ -230,7 +218,6 @@ class Tabuleiro:
         glBindVertexArray(0)
 
     def carregar_textura_tabuleiro(self, caminho):
-        """Carrega arquivos de imagem do disco e gera uma textura id no OpenGL."""
         img = Image.open(caminho)
         img = img.transpose(Image.FLIP_TOP_BOTTOM)
         img_data = img.convert("RGBA").tobytes()

@@ -6,7 +6,6 @@ import pyrr
 import numpy as np
 import math
 
-# Importações dos nossos submódulos e configurações organizadas
 from config import *
 from regras_combate import*
 from estado_jogo import EstadoJogo
@@ -18,7 +17,7 @@ from tabuleiro import Tabuleiro
 estado_app = "MENU"
 opcao_menu = 1
 projection = None
-game = None  # Objeto gerenciador do EstadoGlobal
+game = None  
 
 
 def gerenciar_teclado(window, key, scancode, action, mods):
@@ -41,7 +40,7 @@ def gerenciar_teclado(window, key, scancode, action, mods):
 
     if game is None: return
 
-    # 1. Movimentação do Cursor
+    
     if key == glfw.KEY_UP and game.cursor_row > 0:
         game.cursor_row -= 1
     elif key == glfw.KEY_DOWN and game.cursor_row < 7:
@@ -51,16 +50,16 @@ def gerenciar_teclado(window, key, scancode, action, mods):
     elif key == glfw.KEY_RIGHT and game.cursor_col < 7:
         game.cursor_col += 1
     
-    # 2. Cancelar Seleção (ESC / Backspace)
+    
     elif (key == glfw.KEY_BACKSPACE or key == glfw.KEY_ESCAPE) and game.estado_seletor == MODO_MOVIMENTACAO:
-        print(f"Seleção da peça {game.peca_selecionada} cancelada!")
+
         game.peca_selecionada = None
         game.pos_selecionada = None
         game.estado_seletor = MODO_NAVEGACAO
 
-    # 3. Botão de Seleção / Movimentação (ESPAÇO)
+    
     elif key == glfw.KEY_SPACE:
-        # A) Selecionar Peça
+        
         if game.estado_seletor == MODO_NAVEGACAO:
             id_peca = game.tabuleiro.entities[game.cursor_row][game.cursor_col]
             
@@ -68,15 +67,15 @@ def gerenciar_teclado(window, key, scancode, action, mods):
                 game.peca_selecionada = id_peca
                 game.pos_selecionada = (game.cursor_row, game.cursor_col)
                 game.estado_seletor = MODO_MOVIMENTACAO
-                print(f"Robô {id_peca} selecionado. Espaço para MOVER ou 'A' para ATACAR!")
+
             
             elif game.turno_atual == TURNO_INIMIGO and id_peca in [10, 11]:
                 game.peca_selecionada = id_peca
                 game.pos_selecionada = (game.cursor_row, game.cursor_col)
                 game.estado_seletor = MODO_MOVIMENTACAO
-                print(f"Inseto {id_peca} selecionado. Espaço para MOVER ou 'A' para ATACAR!")
+            
 
-        # B) Mover Peça Selecionada
+        
         elif game.estado_seletor == MODO_MOVIMENTACAO:
             alvo_id = game.tabuleiro.entities[game.cursor_row][game.cursor_col]
             origem_row, orig_col = game.pos_selecionada
@@ -85,10 +84,10 @@ def gerenciar_teclado(window, key, scancode, action, mods):
                 game.peca_selecionada = None
                 game.pos_selecionada = None
                 game.estado_seletor = MODO_NAVEGACAO
-                print("Peça solta.")
+                
                 return
 
-            # Destino vazio -> Move validando o caminho e o terreno (passando game.tabuleiro)
+
             if alvo_id == 0:
                 if validar_movimento(origem_row, orig_col, game.cursor_row, game.cursor_col, game.peca_selecionada, game.tabuleiro):
                     hp_atual = game.hp_unidades.pop((origem_row, orig_col), HP_INICIAL.get(game.peca_selecionada, 3))
@@ -96,12 +95,11 @@ def gerenciar_teclado(window, key, scancode, action, mods):
                     game.tabuleiro.entities[game.cursor_row][game.cursor_col] = game.peca_selecionada
                     game.hp_unidades[(game.cursor_row, game.cursor_col)] = hp_atual
 
-                    print("Peça movida com sucesso!")
+                    
                     game.alternar_turno()
-                else:
-                    print("Movimento inválido! Fora de alcance ou bloqueado por água/obstáculos.")
+                
 
-    # 4. Botão de Ataque Direto (A)
+    
     elif key == glfw.KEY_A and game.estado_seletor == MODO_MOVIMENTACAO:
         if game.pos_selecionada is None:
             return
@@ -114,12 +112,12 @@ def gerenciar_teclado(window, key, scancode, action, mods):
 
         if verificar_inimigo(game.peca_selecionada, alvo_id) and dist_ataque <= limite_ataque:
             game.aplicar_ataque(game.cursor_row, game.cursor_col)
-        else:
-            print("Alvo inválido ou fora do alcance de ataque!")
+        
+        
 
-    # 5. Passar Turno Voluntariamente (P)
+
     elif key == glfw.KEY_P:
-        print("Turno passado voluntariamente.")
+        
         game.alternar_turno()
 
 def inicializar_shaders(vertex_path, fragment_path):
@@ -166,11 +164,8 @@ def main():
     redimensionar_janela(window, largura_tela, altura_tela)
     vertex_shader = inicializar_shaders("shaders/vertex_shader.glsl", "shaders/fragment_shader.glsl")
     
-    # AGORA PODES ESCOLHER O MAPA PASSANDO O ID (1, 2 ou 3):
-    #meu_tabuleiro = Tabuleiro(mapa_id=3) 
-    #game = EstadoJogo(meu_tabuleiro)
     
-    # Carregamento de Malhas e Assets Técnicos
+    
     meu_trator = Modelo3DComTextura("assets/trator.obj", "assets/trator_textura.jpeg", escala=0.4, altura=0.3)
     minha_casa = Modelo3DComTextura("assets/casa.obj", "assets/casa_textura.jpeg", escala=0.001, altura=-0.3)
     meu_mosquito = Modelo3DComTextura("assets/mosquito.obj", "assets/mosquito_textura.png", escala=0.05, altura=0.3)
@@ -181,7 +176,6 @@ def main():
     view = pyrr.matrix44.create_look_at(eye=[9, 9, 9], target=[0, 0, 0], up=[0, 1, 0])
 
 
-    print("\n[ Tela Inicial ]")
 
     text_btao_mapa1 = carregar_textura_menu("assets/btn_mapa1.png")
     text_btao_mapa2 = carregar_textura_menu("assets/btn_mapa2.png")
@@ -210,7 +204,7 @@ def main():
 
     tex_padrao = tex_trator_5
 
-    # Configuração dos Assets do HUD (Coloque isso logo após carregar as texturas)
+
     texturas_hud = {
         1:  {5: tex_trator_5, 4: tex_trator_4, 3: tex_trator_3, 2: tex_trator_2, 1: tex_trator_1},
         2:  {4: tex_escavadeira_4, 3: tex_escavadeira_3, 2: tex_escavadeira_2, 1: tex_escavadeira_1},
@@ -224,17 +218,17 @@ def main():
          
         if estado_app == "MENU":
             
-            #---Fuando Cinza---
+            
             glClearColor(0.15, 0.15, 0.15, 1.0)
             glUseProgram(vertex_shader)
 
             glUniform1i(glGetUniformLocation(vertex_shader, "u_use_lighting"), 0)
 
-            # Desativa o desenho de profundidade
+            
             glDisable(GL_DEPTH_TEST)
 
 
-            # Habilita transparência
+            
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
@@ -243,7 +237,7 @@ def main():
             cor_branca = [1.0, 1.0, 1.0]
 
 
-            # 1. Desenha a borda de selação atrás do botão
+            
             if opcao_menu == 1:
                 desenhar_botao_menu(vertex_shader, -0.5, 0.0, tamanho_borda_larg, tamanho_borda_alt, cor_branca)     
             elif opcao_menu == 2:
@@ -252,7 +246,6 @@ def main():
                 desenhar_botao_menu(vertex_shader, 0.5, 0.0, tamanho_borda_larg, tamanho_borda_alt, cor_branca)      
 
 
-            # 2. Desenha as suas texturar por cima
             desenhar_botao_texturizado(vertex_shader, -0.5, 0.0, 0.35, 0.5, text_btao_mapa1)   # Botão [1] - Verde
             desenhar_botao_texturizado(vertex_shader,  0.0, 0.0, 0.35, 0.5, text_btao_mapa2)   # Botão [2] - Azul
             desenhar_botao_texturizado(vertex_shader,  0.5, 0.0, 0.35, 0.5, text_btao_mapa3)   # Botão [3] - Vermelho
@@ -266,20 +259,17 @@ def main():
             glClearColor(0.12, 0.12, 0.12, 1.0)
             glUseProgram(vertex_shader)
 
-            #---Ligar luz de Phong---
             glUniform1i(glGetUniformLocation(vertex_shader, "u_use_lighting"), 1)
             glUniform3f(glGetUniformLocation(vertex_shader, "viewPos"), 9.0, 9.0, 9.0) 
 
 
-            # LÓGICA DO SOL: Mapas 2 e 3 ensolarados, Mapa 1 nublado
             if game.tabuleiro.mapa_id in [2, 3]:
-                # Sol do semiárido: Força reduzida para não estourar a textura,
-                # com um tom mais alaranjado/quente (R=0.85, G=0.65, B=0.45)
+                
                 glUniform3f(glGetUniformLocation(vertex_shader, "lightPos"), 2.0, 18.0, 2.0)
                 glUniform3f(glGetUniformLocation(vertex_shader, "lightColor"), 1.0, 0.98, 0.92) 
                 glUniform1f(glGetUniformLocation(vertex_shader, "ambientStrength"), 0.45) 
             else:
-                # Mapa 1: Nublado (Luz mais fraca, neutra e sem brilho forte)
+                
                 glUniform3f(glGetUniformLocation(vertex_shader, "lightPos"), 0.0, 15.0, 0.0)
                 glUniform3f(glGetUniformLocation(vertex_shader, "lightColor"), 0.6, 0.6, 0.65) 
                 glUniform1f(glGetUniformLocation(vertex_shader, "ambientStrength"), 0.6)
@@ -294,7 +284,7 @@ def main():
             tempo_atual = glfw.get_time()
 
 
-            # --- Renderização de Modelos e Vidas ---
+            
             for row in range(8):
                 for col in range(8):
                     x_mundo = col - 3.5
@@ -304,23 +294,23 @@ def main():
                     if id_entidade == 0:
                         continue
 
-                    # Desenho das malhas 3D
+                   
                     if id_entidade == 1: 
                         meu_trator.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
                     elif id_entidade == 2: 
                         minha_escavadeira.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual)
                     
                     elif id_entidade == 10: 
-                        # Efeito de Levitação: Calcula uma oscilação vertical baseada no seno do tempo
+                        
                         offset_levitacao = 0.5 + math.sin(tempo_atual * 3.0) * 0.12
                         altura_original = meu_mosquito.altura
                         
-                        # Aplica a altura somada com a oscilação e desenha
+                        
                         meu_mosquito.altura = altura_original + offset_levitacao
                         meu_mosquito.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=tempo_atual * 5.0)
                         meu_mosquito.altura = altura_original  # Restaura a propriedade
                         
-                        # Desenha a sombra dinâmica no chão (encolhe conforme o mosquito sobe)
+                      
                         raio_dinamico = 0.28 - (offset_levitacao * 0.1)
                         desenhar_sombra_circulo(vertex_shader, x_mundo, z_mundo, raio=raio_dinamico)
 
@@ -329,17 +319,17 @@ def main():
                     elif id_entidade == 50: 
                         minha_casa.desenhar(vertex_shader, x_mundo, z_mundo, angulo_pa=0)
 
-                    # Desenho da interface de vida flutuante (Robôs, Insetos e Casas)
+                    
                     if id_entidade in [1, 2, 10, 11, 50]:
                         hp_atual = game.hp_unidades.get((row, col), 3)
                         hp_max = HP_INICIAL.get(id_entidade, 3)
                         desenhar_barra_vida(vertex_shader, x_mundo, z_mundo, hp_atual, hp_max, view)
             
-            # Desliga a luz
+            
             glUniform1i(glGetUniformLocation(vertex_shader, "u_use_lighting"), 0)
             x_cursor_mundo = game.cursor_col - 3.5
 
-            # --- Desenho do Cursor e Projeções Táticas ---
+            
             x_cursor_mundo = game.cursor_col - 3.5
             z_cursor_mundo = game.cursor_row - 3.5
 
@@ -348,7 +338,7 @@ def main():
             else:
                 minha_seta.desenhar(vertex_shader, x_cursor_mundo, z_cursor_mundo, angulo_pa=0)
 
-            # Renderização da grade de previsão ativa (Respeitando caminhos por água)
+            
             if game.estado_seletor == MODO_MOVIMENTACAO and game.pos_selecionada is not None:
                 origem_row, orig_col = game.pos_selecionada
                 limite_ataque = ALCANCE_ATAQUE.get(game.peca_selecionada, 1)
@@ -357,7 +347,7 @@ def main():
                     for c in range(8):
                         if r == origem_row and c == orig_col: continue
 
-                        # Passando game.tabuleiro para validar caminhos na previsão tática visual
+
                         pode_mover = validar_movimento(origem_row, orig_col, r, c, game.peca_selecionada, game.tabuleiro)
                         dist_ataque = calcular_distancia_ataque(origem_row, orig_col, r, c, game.peca_selecionada)
                         pode_atacar = dist_ataque <= limite_ataque
@@ -378,7 +368,6 @@ def main():
                             elif pode_atacar:
                                 desenhar_borda_cursor(vertex_shader, x_valido, z_valido, cor_rgb=[0.6, 0.0, 0.0], tamanho=0.35)
 
-            # Define a cor do cursor principal
             if game.estado_seletor == MODO_MOVIMENTACAO:
                 desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[1.0, 0.8, 0.0], tamanho=0.5)
             else:
@@ -386,14 +375,14 @@ def main():
 
             if game.peca_selecionada is not None:
 
-                    # Desativando a profundidade para a HUD
+                    
                 glDisable(GL_DEPTH_TEST)
 
-                    #Ativa Blending
+                    
                 glEnable(GL_BLEND)
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-                    # Define posição e tamanho da tela
+                    
                 x_placa = 0.65
                 y_placa = -0.65
                 larg_placa = 0.6
