@@ -5,6 +5,7 @@ from config import (
     MODO_NAVEGACAO,
     HP_INICIAL,
     DANO_UNIDADE,
+    MAX_TURNOS_PARTIDA
 )
 
 
@@ -20,37 +21,98 @@ class EstadoJogo:
         self.peca_selecionada = None
         self.pos_selecionada = None
 
+        self.jogo_finalizado = False
+        self.resultado_vencedor = None  # "DEFENSORES" ou "ATACANTES"
+
+        # 🔑 CORREÇÃO 1: Adicionado o contador de turnos que estava faltando!
+        self.turno_contador = 1
+
         self.hp_unidades = {}
         self.inicializar_vidas()
 
     def inicializar_vidas(self):
-
         for r in range(8):
             for c in range(8):
                 id_peca = self.tabuleiro.entities[r][c]
                 if id_peca != 0:
                     self.hp_unidades[(r, c)] = HP_INICIAL.get(id_peca, 3)
 
-    def alternar_turno(self):
+    def verificar_fim_de_jogo(self):
+        """Analisa o tabuleiro para determinar se houve um vencedor e muda o estado do jogo."""
+        if self.jogo_finalizado:
+            return True
 
+        existe_robo = False
+        existe_inseto = False
+        existe_casa = False
+
+        # Varre as 64 casas do tabuleiro diretamente para não depender do dicionário de HP
+        for r in range(8):
+            for c in range(8):
+                id_peca = self.tabuleiro.entities[r][c]
+                
+                if id_peca in [1, 2]:    # IDs dos seus Robôs (Trator, Escavadeira)
+                    existe_robo = True
+                elif id_peca in [10, 11]: # IDs dos seus Insetos (Mosquito, Barata)
+                    existe_inseto = True
+                elif id_peca == 50:       # ID da Casa
+                    existe_casa = True
+
+        # CONDICIONAL 1: Insetos destruíram todas as casas -> Vitória dos Atacantes
+        if not existe_casa:
+            self.jogo_finalizado = True
+            self.resultado_vencedor = "ATACANTES"
+            print("▶️ FIM DE JOGO: Casas destruídas! ATACANTES VENCERAM.")
+            return True
+
+        # CONDICIONAL 2: Insetos destruíram todos os robôs -> Vitória dos Atacantes
+        if not existe_robo:
+            self.jogo_finalizado = True
+            self.resultado_vencedor = "ATACANTES"
+            print("▶️ FIM DE JOGO: Robôs destruídos! ATACANTES VENCERAM.")
+            return True
+
+        # CONDICIONAL 3: Robôs eliminaram todos os insetos -> Vitória dos Defensores
+        if not existe_inseto:
+            self.jogo_finalizado = True
+            self.resultado_vencedor = "DEFENSORES"
+            print("▶️ FIM DE JOGO: Insetos eliminados! DEFENSORES VENCERAM.")
+            return True
+
+        # CONDICIONAL 4: Defensores resistiram ao limite de turnos
+        if self.turno_contador > MAX_TURNOS_PARTIDA:
+            self.jogo_finalizado = True
+            self.resultado_vencedor = "DEFENSORES"
+            print("▶️ FIM DE JOGO: Turnos esgotados! DEFENSORES VENCERAM.")
+            return True
+
+        return False
+
+    def alternar_turno(self):
         self.peca_selecionada = None
         self.pos_selecionada = None
         self.estado_seletor = MODO_NAVEGACAO
+        
+        # 🔑 CORREÇÃO 2: Incrementa o turno_contador quando o ciclo de turnos avança
+        if self.turno_atual == TURNO_INIMIGO:
+            self.turno_contador += 1
+            print(f"⏰ Avançando para o Turno: {self.turno_contador}/{MAX_TURNOS_PARTIDA}")
+
         self.turno_atual = (
             TURNO_INIMIGO if self.turno_atual == TURNO_JOGADOR else TURNO_JOGADOR
         )
 
-    def causar_dano(self, r, c, quantidade):
+        # 🔑 CORREÇÃO 3: Força a checagem imediatamente no momento da troca de turno
+        self.verificar_fim_de_jogo()
 
+    def causar_dano(self, r, c, quantidade):
         if (r, c) not in self.hp_unidades:
             return
 
-        id_alvo = self.tabuleiro.entities[r][c]
         self.hp_unidades[(r, c)] -= quantidade
         hp_restante = self.hp_unidades[(r, c)]
 
         if hp_restante <= 0:
-
             self.tabuleiro.entities[r][c] = 0
             self.hp_unidades.pop((r, c), None)
 
@@ -62,28 +124,19 @@ class EstadoJogo:
 
         # 1. APLICAR DANO DIRETO INICIAL
         dano_base = DANO_UNIDADE.get(id_atacante, 1)
-        print(
-            f"\n⚔️ ATAQUE: Peça {id_atacante} atacou Peça {id_alvo} em [{alvo_r}][{alvo_c}]"
-        )
 
         # Salva o HP antes do ataque para saber se o alvo vai sobreviver
         hp_alvo_antes = self.hp_unidades.get((alvo_r, alvo_c), 0)
         self.causar_dano(alvo_r, alvo_c, dano_base)
 
-        # Se o alvo morreu com o dano direto, não há necessidade de empurrar
         if hp_alvo_antes - dano_base <= 0:
             self.alternar_turno()
             return
 
-        # 🛑 TRAVA ADICIONADA: Se o alvo for uma Casa (ID 50), ela NÃO é empurrada!
         if id_alvo == 50:
-            print(
-                "🏢 ESTRUTURA FIXA: Casas e edifícios civis absorvem o impacto e não podem ser empurrados."
-            )
             self.alternar_turno()
             return
 
-        # 2. CALCULAR VETOR E DIREÇÃO DO EMPURRÃO (Apenas para unidades móveis: Robôs e Insetos)
         dir_r = alvo_r - origem_r
         dir_c = alvo_c - origem_c
 
@@ -95,43 +148,23 @@ class EstadoJogo:
         dest_r = alvo_r + dir_r
         dest_c = alvo_c + dir_c
 
-        print(f"➡️ Tentando empurrar Peça {id_alvo} para [{dest_r}][{dest_c}]...")
-
         # 3. VERIFICAR CENÁRIOS DE COLISÃO
-        # Cenário A: Fora dos limites do tabuleiro
         if not (0 <= dest_r < 8 and 0 <= dest_c < 8):
-            print(
-                "🧱 COLISÃO: Empurrado contra os limites do mapa! +1 de dano extra por impacto."
-            )
             self.causar_dano(alvo_r, alvo_c, 1)
 
-        # Cenário B: Colisão com outra unidade ou obstáculo
         elif self.tabuleiro.entities[dest_r][dest_c] != 0:
-            id_obstaculo = self.tabuleiro.entities[dest_r][dest_c]
-            print(
-                f"💥 COLISÃO: Empurrado contra Peça {id_obstaculo} em [{dest_r}][{dest_c}]! Ambas sofrem +1 de dano."
-            )
             self.causar_dano(alvo_r, alvo_c, 1)
             self.causar_dano(dest_r, dest_c, 1)
 
-        # Cenário C: Destino livre, mas é Água (Rio Jaguaribe = ID 1)
         elif self.tabuleiro.grid[dest_r][dest_c] == 1:
             if id_alvo != 10:  # Se não for o mosquito voador, afoga
-                print(
-                    f"🌊 AFOGAMENTO: Peça terrestre {id_alvo} foi jogada no Rio Jaguaribe e afundou!"
-                )
                 self.causar_dano(
                     alvo_r, alvo_c, self.hp_unidades.get((alvo_r, alvo_c), 99)
                 )
             else:
-                print(
-                    "🪰 O Mosquito foi empurrado sobre o rio e continua flutuando com sucesso."
-                )
                 self.deslocar_entidade_fisicamente(alvo_r, alvo_c, dest_r, dest_c)
 
-        # Cenário D: O bloco de destino está completamente vazio e seguro
         else:
-            print("🍃 Destino limpo. Peça deslocada com sucesso para trás!")
             self.deslocar_entidade_fisicamente(alvo_r, alvo_c, dest_r, dest_c)
 
         self.alternar_turno()

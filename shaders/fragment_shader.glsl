@@ -2,7 +2,7 @@
 
 in vec2 TexCoord;
 in vec3 FragPos;
-in vec3 Normal; // CORRIGIDO: Era vec, agora é vec3
+in vec3 Normal; 
 
 out vec4 FragColor;
 
@@ -21,7 +21,7 @@ void main(){
     
     vec4 baseColor;
 
-    // CORRIGIDO: Era u_solid_color, agora é u_use_solid_color
+    
     if(u_use_solid_color == 1){ 
         baseColor = u_solid_color;
     }else{
@@ -39,18 +39,18 @@ void main(){
 
     // 2° Difusa
     vec3 norm = normalize(Normal);
-    vec3 lightDir = normalize(lightPos - FragPos); // CORRIGIDO: Era vec, agora é vec3
+    vec3 lightDir = normalize(lightPos - FragPos); 
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * lightColor;
 
-    // 3° Especular (Brilho do Material)
+    // 3° Especular 
     float specularStrength = 0.3;
     float shininess = 16.0;
     vec3 viewDir = normalize(viewPos - FragPos);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
     
-    // CORRIGIDO: Faltava o * entre spec e lightColor
+    
     vec3 specular = specularStrength * spec * lightColor; 
 
     vec3 result = (ambient + diffuse + specular) * baseColor.rgb;

@@ -60,7 +60,6 @@ def validar_movimento(r_orig, c_orig, r_dest, c_dest, peca_id, tabuleiro):
                         continue # Bloqueia: não pode pisar e nem passar por aqui
                     
                     
-                    
                     visitados.add((nova_r, nova_c))
                     fila.append((nova_r, nova_c, passos + 1))
 

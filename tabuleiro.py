@@ -48,7 +48,7 @@ class Tabuleiro:
             self.grid[4][3] = 1
             self.grid[6][3] = 1  # Lago ao Sul
             self.grid[7][3] = 1
-            # Linhas 2 e 5 na coluna 3 são GRAMA (0), servindo como pontes naturais!
+            # Linhas 2 e 5 na coluna 3 são GRAMA (0), servindo como pontes naturais
 
             # Cidades/Zonas de concreto (Lado Esquerdo)
             self.grid[2][1] = 2

@@ -2,6 +2,9 @@
 TURNO_JOGADOR = 0
 TURNO_INIMIGO = 1
 
+# Número de turnos que os defensores precisam resistir para vencer
+MAX_TURNOS_PARTIDA = 10  
+
 # Estados do Seletor/Cursor
 MODO_NAVEGACAO = 0
 MODO_MOVIMENTACAO = 1
