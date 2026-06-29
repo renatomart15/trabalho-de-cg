@@ -27,7 +27,7 @@ def gerenciar_teclado(window, key, scancode, action, mods):
         return
     
     # -------------------------------------------------------------------------
-    # 1. LOGICA DO MENU (Não pode ter trava de 'game is None' aqui!)
+    # 1. LOGICA DO MENU 
     # -------------------------------------------------------------------------
     if estado_app == "MENU":
         if key == glfw.KEY_LEFT and opcao_menu > 1:
@@ -46,12 +46,12 @@ def gerenciar_teclado(window, key, scancode, action, mods):
     # -------------------------------------------------------------------------
     # 2. TRAVAS DE SEGURANÇA PARA A PARTIDA EM ANDAMENTO
     # -------------------------------------------------------------------------
-    # Agora sim, se estamos no modo "JOGO", checamos se o estado existe ou se acabou
+   
     if game is None or game.jogo_finalizado:
         return
 
     # -------------------------------------------------------------------------
-    # 3. CONTROLES DO JOGO (Movimentação, seleção e ataque)
+    # 3. CONTROLES DO JOGO 
     # -------------------------------------------------------------------------
     # Movimentação do Cursor
     if key == glfw.KEY_UP and game.cursor_row > 0:
@@ -161,7 +161,7 @@ def main():
     glfw.set_key_callback(window, gerenciar_teclado)
     glEnable(GL_DEPTH_TEST) 
 
-    # 🛡️ Inicializa a variável como None para evitar colisões de escopo antes do menu definir o tabuleiro
+    
     game = None
 
     redimensionar_janela(window, largura_tela, altura_tela)
@@ -203,7 +203,6 @@ def main():
 
     tex_padrao = tex_trator_5
 
-    # 🔑 ADIÇÃO: Carregamento das texturas das placas de texto de Fim de Jogo
     tex_vitoria_defensores = carregar_textura_menu("assets/defensores.png")
     tex_vitoria_atacantes = carregar_textura_menu("assets/atacantes.png")
 
@@ -249,29 +248,29 @@ def main():
             glEnable(GL_DEPTH_TEST)
 
         # ---------------------------------------------------------------------
-        # ESTADO: JOGO ATIVO (EM PARTIDA)
+        # ESTADO: JOGO ATIVO
         # ---------------------------------------------------------------------
         elif estado_app == "JOGO" and game is not None:
             
-            # 🔑 CENÁRIO A: O JOGO ACABOU (Pinta o fundo colorido + Desenha a placa de texto PNG)
+            # CENÁRIO A: O JOGO ACABOU 
             if game.jogo_finalizado:
                 if game.resultado_vencedor == "DEFENSORES":
-                    glClearColor(0.05, 0.25, 0.05, 1.0) # Verde escuro tático
+                    glClearColor(0.05, 0.25, 0.05, 1.0) # Verde escuro
                     textura_mensagem = tex_vitoria_defensores
                 else:
                     glClearColor(0.25, 0.05, 0.05, 1.0) # Vermelho escuro
                     textura_mensagem = tex_vitoria_atacantes
                 
-                glDisable(GL_DEPTH_TEST) # Desativa profundidade para renderizar a HUD perfeitamente
-                glEnable(GL_BLEND)       # Ativa o canal alpha para ler a transparência do PNG
+                glDisable(GL_DEPTH_TEST) 
+                glEnable(GL_BLEND)       
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-                # Carimba o painel estático centralizado na tela (x=0.0, y=0.0) com tamanho tático (1.4 x 0.7)
+               
                 desenhar_botao_texturizado(vertex_shader, 0.0, 0.0, 1.4, 0.7, textura_mensagem)
 
                 glDisable(GL_BLEND)
 
-            # CENÁRIO B: PARTIDA ROLANDO NORMALMENTE (Renderiza todo o cenário 3D)
+            # CENÁRIO B: PARTIDA ROLANDO NORMALMENTE
             else:
                 glEnable(GL_DEPTH_TEST)
                 glClearColor(0.12, 0.12, 0.12, 1.0) 
@@ -296,7 +295,7 @@ def main():
                 game.tabuleiro.draw(vertex_shader)
                 tempo_atual = glfw.get_time()
 
-                # Varredura para desenhar as unidades no tabuleiro
+                # Desenhar as unidades no tabuleiro
                 for row in range(8):
                     for col in range(8):
                         x_mundo = col - 3.5
@@ -332,7 +331,7 @@ def main():
                             hp_max = HP_INICIAL.get(id_entidade, 3)
                             desenhar_barra_vida(vertex_shader, x_mundo, z_mundo, hp_atual, hp_max, view)
                 
-                # Renderização do Seletor e Grid Tático
+                
                 glUniform1i(glGetUniformLocation(vertex_shader, "u_use_lighting"), 0)
                 x_cursor_mundo = game.cursor_col - 3.5
                 z_cursor_mundo = game.cursor_row - 3.5
@@ -374,7 +373,7 @@ def main():
                 else:
                     desenhar_borda_cursor(vertex_shader, x_cursor_mundo, z_cursor_mundo, cor_rgb=[0.2, 0.8, 0.2], tamanho=0.5)
 
-                # Renderização da Placa HUD da Unidade Selecionada
+               
                 if game.peca_selecionada is not None:
                     glDisable(GL_DEPTH_TEST)
                     glEnable(GL_BLEND)
